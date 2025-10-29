@@ -1,0 +1,15 @@
+# Web
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+python-dotenv>=1.0,<2
+
+# LangChain + integrations (pinned to 0.3 series)
+langchain==0.3.*
+langchain-community==0.3.*
+langchain-upstage>=0.1.6
+
+# Vector Store
+chromadb>=0.5.5
+
+# Optional: ensure Pydantic v2 (FastAPI dependency, included transitively)
+pydantic>=2.7,<3
