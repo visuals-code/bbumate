@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="/public/thumbnail.png" alt="Thumbnail" width="800">
+</p>
+
 ## 쀼메이트 👰🏻🤵🏻 - 신혼부부 챗봇 상담 서비스
 
 ### 1. 서비스 개요
