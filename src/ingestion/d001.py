@@ -161,7 +161,15 @@ def verify_storage():
             return
 
         # 4. 간단한 검색 테스트
-        test_query = "주택 시장의 평균 가격 변화는 어떠한가?"
+        test_query = input(
+            "\n테스트 검색어를 입력하세요 (Enter 시 기본값 사용): "
+        ).strip()
+
+        # 입력이 없으면 기본값 사용
+        if not test_query:
+            test_query = "지역별 신혼부부 주택공급 현황을 알려줘"
+            print(f"   → 기본 검색어 사용: '{test_query}'")
+
         # .as_retriever()를 사용하여 검색
         retriever = persisted_db.as_retriever(search_kwargs={"k": 1})
         results = retriever.invoke(test_query)
