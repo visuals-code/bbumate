@@ -13,3 +13,9 @@ chromadb>=0.5.5
 
 # Optional: ensure Pydantic v2 (FastAPI dependency, included transitively)
 pydantic>=2.7,<3
+
+# HTML parsing
+beautifulsoup4>=4.12,<5
+
+# CLI progress bar
+tqdm>=4.66,<5
