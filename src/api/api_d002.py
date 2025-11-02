@@ -62,7 +62,7 @@ def ask_question(request: QueryRequest):
     - **query**: 질문 내용 (1~500자)
     """
     try:
-        logger.info(f"📥 질문 수신: {request.query[:50]}...")
+        logger.info(f"질문 수신: {request.query[:50]}...")
 
         res = run_rag(request.query)
 
@@ -73,14 +73,14 @@ def ask_question(request: QueryRequest):
             num_docs=res.get("num_docs", 0),
         )
 
-        logger.info(f"✅ 응답 완료 ({response.latency}, {response.num_docs}개 문서)")
+        logger.info(f"응답 완료 ({response.latency}, {response.num_docs}개 문서)")
         return response
 
     except ValueError as e:
-        logger.warning(f"⚠️ 입력 오류: {e}")
+        logger.warning(f"입력 오류: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"❌ 서버 오류: {str(e)}", exc_info=True)
+        logger.error(f"서버 오류: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"서버 오류: {str(e)}")
 
 
