@@ -31,8 +31,10 @@ def extract_text_from_html(html_content: str) -> str:
         # script, style 태그 제거
         for script in soup(["script", "style"]):
             script.decompose()
+
         text = soup.get_text(separator="\n", strip=True)
         return text
+
     except Exception as e:
         logger.warning(f"HTML 파싱 실패, raw text 사용: {e}")
         return html_content
@@ -44,6 +46,7 @@ def load_html_documents(input_dir: Path) -> list[Document]:
     - 파일 단위 실패는 전체 배치를 중단하지 않고 로그만 남기고 계속 진행한다.
     - 메타데이터에 원본 경로/길이를 저장해 추적성과 디버깅을 돕는다.
     """
+
     if not input_dir.exists():
         raise FileNotFoundError(f"입력 디렉토리가 없습니다: {input_dir}")
 
@@ -77,14 +80,15 @@ def load_html_documents(input_dir: Path) -> list[Document]:
                     },
                 )
             )
+
         except Exception as e:
             logger.error(f"{file_path.name} 로드 실패: {e}")
             failed_files.append(file_path.name)
 
     if failed_files:
         logger.warning(
-            f"실패한 파일 ({len(failed_files)}개): {', '.join(failed_files[:5])}" +
-            (f" 외 {len(failed_files)-5}개" if len(failed_files) > 5 else "")
+            f"실패한 파일 ({len(failed_files)}개): {', '.join(failed_files[:5])}"
+            + (f" 외 {len(failed_files)-5}개" if len(failed_files) > 5 else "")
         )
 
     return documents
@@ -125,6 +129,7 @@ def embed_from_html(
     # - 검색 결과가 원문에서 어느 위치인지 추적하기 위한 최소 정보
     for i, split in enumerate(splits):
         split.metadata["chunk_index"] = i
+
     logger.info(
         f"✂️ 총 {len(splits)}개 청크로 분할 완료 (chunk={chunk_size}, overlap={chunk_overlap})"
     )
@@ -143,6 +148,7 @@ def embed_from_html(
         embedding_model = os.getenv("UPSTAGE_EMBEDDING_MODEL", "embedding-query")
         embeddings = UpstageEmbeddings(api_key=api_key, model=embedding_model)
         logger.info(f"🔧 임베딩 모델: {embedding_model}")
+
     except Exception as e:
         raise ValueError(f"Upstage 임베딩 초기화 실패: {e}")
 
@@ -160,7 +166,7 @@ def embed_from_html(
             logger.info(f"📦 {batch_size}개씩 배치 처리")
             vectordb = None
             for i in tqdm(range(0, len(splits), batch_size), desc="임베딩"):
-                batch = splits[i:i + batch_size]
+                batch = splits[i : i + batch_size]
                 if vectordb is None:
                     vectordb = Chroma.from_documents(
                         documents=batch,
@@ -197,14 +203,19 @@ def embed_from_html(
         logger.info(f"📊 컬렉션 이름: {collection_name}")
         logger.info(f"📈 저장된 청크 수: {doc_count}")
         logger.info(f"📄 원본 문서 수: {len(documents)}")
+
         if doc_count:
             logger.info(f"📏 평균 청크 크기: {total_chars // doc_count:,}자")
 
         if test_results:
             logger.info(f"🧩 샘플 메타데이터:")
             logger.info(f"   • source: {test_results[0].metadata.get('source')}")
-            logger.info(f"   • chunk_index: {test_results[0].metadata.get('chunk_index')}")
-            logger.info(f"   • total_chars: {test_results[0].metadata.get('total_chars')}")
+            logger.info(
+                f"   • chunk_index: {test_results[0].metadata.get('chunk_index')}"
+            )
+            logger.info(
+                f"   • total_chars: {test_results[0].metadata.get('total_chars')}"
+            )
             logger.info(f"🔍 검색 테스트 성공 (쿼리: '{first_words}')")
         logger.info("=" * 60)
 
