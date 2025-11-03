@@ -5,12 +5,19 @@ pip install langchain-community
 pip install langchain-text-splitters
 """
 
-from .pdf_processor import process_pdf_to_semantic_chunks
-from .batch_processor import process_pdf_directory
-from .vectorstore_manager import VectorStoreManager
+from .query_router import QueryRouter
+from .retrieval import load_retriever, format_docs
+from .grader import DocumentGrader
+from .query_rewriter import QueryRewriter
+from .web_search_fallback import WebSearchFallback
+from .advanced_rag_chain import AdvancedRAGChain
 
 __all__ = [
-    "process_pdf_to_semantic_chunks",
-    "process_pdf_directory",
-    "VectorStoreManager",
+    "QueryRouter",
+    "load_retriever",
+    "format_docs",
+    "DocumentGrader",
+    "QueryRewriter",
+    "WebSearchFallback",
+    "AdvancedRAGChain",
 ]

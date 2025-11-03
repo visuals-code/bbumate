@@ -4,7 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # 프로젝트 루트 경로 추가
-PROJECT_ROOT = Path(__name__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -22,7 +22,7 @@ def main():
     COLLECTION_NAME = os.getenv("COLLECTION_NAME", "pdf_subscription_chunks")
 
     print("=" * 60)
-    print("D005 Ingestion Pipeline 시작")
+    print("D004 Ingestion Pipeline 시작")
     print("=" * 60)
 
     # 1단계: PDF 디렉토리 처리

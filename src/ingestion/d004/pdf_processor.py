@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from langchain_community.document_loaders import PDFMinerPDFasHTMLLoader
 from bs4 import BeautifulSoup
 import re
