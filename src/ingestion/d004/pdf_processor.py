@@ -1,10 +1,8 @@
-# pip install beautifulsoup4
-
 from langchain_community.document_loaders import PDFMinerPDFasHTMLLoader
 from bs4 import BeautifulSoup
 import re
 from langchain_core.documents import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from tiktoken import get_encoding
 
 

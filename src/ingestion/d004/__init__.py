@@ -1,7 +1,8 @@
 """
 pip install langchain-upstage
-!pip install torch transformers sentence-transformers
-!pip install langchain-community
+pip install torch transformers sentence-transformers
+pip install langchain-community
+pip install langchain-text-splitters
 """
 
 from .pdf_processor import process_pdf_to_semantic_chunks

@@ -1,5 +1,3 @@
-# pip install langchain-chroma
-
 from langchain_chroma import Chroma
 from langchain_upstage import UpstageEmbeddings
 import os
@@ -7,35 +5,39 @@ from langchain_core.documents import Document
 
 
 class VectorStoreManager:
-    # 초기화
-    def __init__(self, db_path="./chroma_storage", api_key=None):
-        self.db_path = db_path
-        self.api_key = api_key or os.getenv("UPSTAGE_API_KEY")
 
-        # Upstage Embeddings 초기화
-        self.embeddings = UpstageEmbeddings(
-            api_key=self.api_key, model="solar-embedding-1-large-passage"
-        )
+    @staticmethod
 
     # 문서 벡터 저장소에 저장
     def save_documents(
-        self,
         documents: list[Document],
-        collection_name="pdf_promotion_chunks",
+        collection_name=None,
+        db_path="./chroma_storage",
+        api_key=None,
+        embedding_model=None,
         batch_size=3,
     ):
+
+        api_key = api_key or os.getenv("UPSTAGE_API_KEY")
+        db_path = db_path or os.getenv("CHROMA_DB_DIR", "./chroma_storage")
+        embedding_model = embedding_model or os.getenv(
+            "UPSTAGE_EMBEDDING_MODEL", "solar-embedding-1-large"
+        )
+        collection_name = collection_name or os.getenv(
+            "COLLECTION_NAME", "pdf_promotion_chunks"
+        )
+
+        embeddings = UpstageEmbeddings(api_key=api_key, model=embedding_model)
 
         # from_documents를 사용하여 벡터 저장소 생성 및 저장
         vectorstore = Chroma.from_documents(
             documents=documents,
-            embedding=self.embeddings,
+            embedding=embeddings,
             collection_name=collection_name,
-            persist_directory=self.db_path,
+            persist_directory=db_path,
         )
-        print(f"✅ ChromaDB 저장 완료: {self.db_path}")
 
-        # 저장된 데이터 확인
+        print(f"ChromaDB 저장 완료: {db_path}")
+
         collection_data = vectorstore.get()
-        print(f"저장된 문서 수: {len(collection_data['ids'])}")
-
         return vectorstore
