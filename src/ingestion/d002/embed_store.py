@@ -220,7 +220,7 @@ def embed_from_html(
             logger.info(
                 f"   • total_chars: {test_results[0].metadata.get('total_chars')}"
             )
-            logger.info(f"🔍 검색 테스트 성공 (쿼리: '{first_words}')")
+            logger.info(f"검색 테스트 성공 (쿼리: '{first_words}')")
         logger.info("=" * 60)
 
     except Exception as e:
