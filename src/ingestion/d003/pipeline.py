@@ -1,9 +1,8 @@
-"""ingestion pipeline
-load documents -> split -> embed -> persist to chroma
-"""
+"""ingestion pipeline: 문서를 로드→청크 분할→임베딩→Chroma에 영속 저장하는 인덱싱 파이프라인"""
 
 import argparse
 import os
+import time
 import sys
 from typing import Literal
 
@@ -22,9 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-dir", type=str, default="data", help="PDF root directory"
     )
-    parser.add_argument(
-        "--persist-dir", type=str, default=None, help="Chroma persist directory"
-    )
+    # persist dir is determined via env var CHROMA_DB_DIR (with default); no CLI arg
     parser.add_argument(
         "--mode",
         type=str,
@@ -64,9 +61,10 @@ def main() -> None:
     embeddings = get_upstage_embeddings()
 
     print("[4/4] Persisting to Chroma ...")
-    persist_to_chroma(
-        chunks, persist_directory=args.persist_dir, embedding_function=embeddings
-    )
+    start_time = time.perf_counter()
+    persist_to_chroma(chunks, embedding_function=embeddings)
+    elapsed_s = time.perf_counter() - start_time
+    print(f"[TIME] Embedded and persisted {len(chunks)} chunks in {elapsed_s:.2f}s")
 
     print("[DONE] Ingestion completed.")
 
