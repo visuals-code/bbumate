@@ -5,6 +5,8 @@ python-dotenv>=1.0,<2
 
 # LangChain + integrations (pinned to 0.3 series)
 langchain==0.3.*
+langchain-core==0.3.*
+langchain-text-splitters==0.3.*
 langchain-community==0.3.*
 langchain-upstage>=0.1.6
 
