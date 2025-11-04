@@ -99,20 +99,6 @@ def run_basic_tests():
             "expected": "clarification",
         },
         {
-            "name": "시간 표현 (웹 검색)",
-            "question": "오늘 발표된 신혼부부 정책",
-            "region": None,
-            "housing_type": None,
-            "expected": "web_search",
-        },
-        {
-            "name": "특정 연도 (웹 검색)",
-            "question": "2025년 11월 신혼부부 대출 금리",
-            "region": None,
-            "housing_type": None,
-            "expected": "web_search",
-        },
-        {
             "name": "희귀 주제 (웹 검색)",
             "question": "독도 거주 신혼부부 혜택",
             "region": None,

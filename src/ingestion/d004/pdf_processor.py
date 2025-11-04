@@ -17,10 +17,6 @@ def process_pdf_to_semantic_chunks(file_path):
         Path(__file__).parent.parent.parent / "data" / "d004" / "url_mapping.json"
     )
 
-    # 현재 파일의 URL 찾기
-    file_name = Path(file_path).name
-    source_url = url_mapping.get(file_name, None)
-
     if mapping_file.exists():
         with open(mapping_file, "r", encoding="utf-8") as f:
             url_mapping = json.load(f)
@@ -28,6 +24,7 @@ def process_pdf_to_semantic_chunks(file_path):
     # 현재 파일의 URL 찾기
     file_name = Path(file_path).name
     source_url = url_mapping.get(file_name, None)
+
     # 1. HTML 로드
     loader = PDFMinerPDFasHTMLLoader(file_path)
     docs = loader.load()

@@ -90,13 +90,8 @@ class AdvancedRAGChain:
             if not title:
                 title = Path(source_file).stem.replace("_", " ").title()
 
-            # url 추출 및 디버깅
+            # url 추출
             url = metadata.get("url", None)
-
-            # 🔍 디버깅 출력 (나중에 제거 가능)
-            print(f"[DEBUG] 출처: {Path(source_file).name}")
-            print(f"  - URL: {url}")
-            print(f"  - 전체 메타데이터: {metadata}")
 
             sources.append({"title": title, "url": url, "source": source_file})
 

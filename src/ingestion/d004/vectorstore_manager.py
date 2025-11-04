@@ -40,4 +40,11 @@ class VectorStoreManager:
         print(f"ChromaDB 저장 완료: {db_path}")
 
         collection_data = vectorstore.get()
+        print(f" 저장 검증: {len(collection_data['ids'])}개 문서 확인됨")
+
+        # 샘플 출력
+        if collection_data["ids"]:
+            print(f"   첫 문서 ID: {collection_data['ids'][0]}")
+            print(f"   첫 문서 메타데이터: {collection_data['metadatas'][0]}")
+
         return vectorstore
