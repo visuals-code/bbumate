@@ -1,76 +1,83 @@
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from langchain_upstage import ChatUpstage, UpstageEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
-
-# 1. 환경변수 불러오기
+# 환경변수 불러오기
 load_dotenv()
 UPSTAGE_API_KEY = os.getenv("UPSTAGE_API_KEY")
-CHROMA_DB_DIR = os.getenv("CHROMA_DB_DIR", "./chroma_storage")
-EMBEDDING_MODEL_NAME = os.getenv("UPSTAGE_EMBEDDING_MODEL", "solar-embedding-1-large")
-CHAT_MODEL_NAME = os.getenv("UPSTAGE_CHAT_MODEL", "solar-1-mini-chat")
 
 if not UPSTAGE_API_KEY:
     raise ValueError("Please set UPSTAGE_API_KEY in your .env file")
 
-# 2. FastAPI 앱 인스턴스 생성
+# FastAPI 앱 인스턴스 생성
 app = FastAPI(title="RAG API - 신혼부부 지원정책 상담")
 
-# 3. 임베딩 & LLM 초기화
-embedding_model = UpstageEmbeddings(
-    api_key=UPSTAGE_API_KEY,
-    model=EMBEDDING_MODEL_NAME
+# CORS
+origins = [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-llm_model = ChatUpstage(
-    api_key=UPSTAGE_API_KEY,
-    model=CHAT_MODEL_NAME
-)
 
-# 4. ChromaDB 초기화
-vectorstore = Chroma(
-    persist_directory=CHROMA_DB_DIR,
-    embedding_function=embedding_model
-)
-
-# 5. Retriever 설정
-retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-
-# 6. RAG 체인 구성 (LangChain 0.3 Runnables API)
-def _format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
-
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "주어진 컨텍스트를 사용하여 사용자 질문에 간결하고 정확하게 답변하세요.\n"
-               "모르면 모른다고 답하세요.\n"
-               "컨텍스트:\n{context}"),
-    ("human", "질문: {question}")
-])
-
-rag_chain = (
-    {"context": retriever | _format_docs, "question": RunnablePassthrough()}
-    | prompt
-    | llm_model
-    | StrOutputParser()
-)
-
-# 7. 요청 모델
-class QueryRequest(BaseModel):
-    question: str
-
-# 8. API 엔드포인트
-@app.post("/query")
-def query_rag(request: QueryRequest):
-    answer = rag_chain.invoke({"question": request.question})
-    return {"answer": answer}
-
-# 9. 루트 경로
+# 루트 경로
 @app.get("/")
 def root():
     return {"message": "신혼부부 지원정책 RAG 서버가 실행 중입니다!"}
+
+
+from src.chains.d003.chain import answer_question
+from src.generation.d003.prompting import (
+    extract_link_info,
+    format_answer_md,
+    format_answer_html,
+)
+
+
+class D003QueryRequest(BaseModel):
+    question: str
+
+
+class SourceItem(BaseModel):
+    title: str
+    url: str | None = None
+    source: str
+
+
+class D003QueryResponse(BaseModel):
+    answer: str
+    answer_md: str
+    answer_html: str
+    sources: list[SourceItem]
+
+
+# API 엔드포인트
+@app.post("/query", response_model=D003QueryResponse)
+def query_d003(request: D003QueryRequest):
+    # d003 체인 모듈을 사용해 답변 생성
+    answer, docs = answer_question(request.question, k=3)
+
+    # 출처 정보 구성
+    sources = []
+    for d in docs:
+        title, url, src = extract_link_info(d)
+        sources.append({"title": title, "url": url, "source": src})
+
+    # 최종 출력용 포맷(마크다운/HTML) 생성
+    answer_md = format_answer_md(answer)
+    answer_html = format_answer_html(answer)
+
+    return {
+        "answer": answer,
+        "answer_md": answer_md,
+        "answer_html": answer_html,
+        "sources": sources,
+    }

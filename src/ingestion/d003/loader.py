@@ -1,8 +1,9 @@
-"""load documents"""
+"""1. Load documents"""
 
 import os
+import json
 import glob
-from typing import List, Literal
+from typing import List, Literal, Dict, Optional
 
 from langchain_core.documents import Document
 
@@ -81,22 +82,75 @@ def load_documents(data_dir: str, mode: LoadMode = "pdf") -> List[Document]:
     Returns a list of LangChain Documents with metadata including source path and loader mode.
     """
     pdf_paths = list_pdf_paths(data_dir)
+    url_map = _load_url_map(data_dir)
     all_docs: List[Document] = []
 
     for path in pdf_paths:
         if mode == "pdf":
             docs = _load_with_pypdf_loader(path)
             for d in docs:
-                d.metadata = {**(d.metadata or {}), "source": path, "loader": "pypdf"}
+                enriched = {**(d.metadata or {}), "source": path, "loader": "pypdf"}
+                mapped_url = _lookup_url(url_map, data_dir, path)
+                if mapped_url:
+                    enriched["url"] = mapped_url
+                d.metadata = enriched
             all_docs.extend(docs)
         else:
             raw_text = _extract_text_with_pdfplumber(path)
             html_text = _to_minimal_html(raw_text)
-            all_docs.append(
-                Document(
-                    page_content=html_text,
-                    metadata={"source": path, "loader": "pdfplumber_html"},
-                )
-            )
+            meta: Dict[str, str] = {"source": path, "loader": "pdfplumber_html"}
+            mapped_url = _lookup_url(url_map, data_dir, path)
+            if mapped_url:
+                meta["url"] = mapped_url
+            all_docs.append(Document(page_content=html_text, metadata=meta))
 
     return all_docs
+
+
+def _load_url_map(data_dir: str) -> Dict[str, str]:
+    """Load an optional URL mapping from JSON.
+
+    Priority:
+    1) URL_MAP_JSON env var path
+    2) <data_dir>/url_map.json
+    3) ./data/url_map.json (repo default)
+
+    The JSON should be an object mapping keys to URLs. Keys can be:
+    - full path (as stored in metadata["source"])
+    - path relative to data_dir
+    - base filename (with or without extension)
+    """
+    candidates: List[str] = []
+    env_path = os.getenv("URL_MAP_JSON")
+    if env_path:
+        candidates.append(env_path)
+    candidates.append(os.path.join(data_dir, "url_map.json"))
+    candidates.append(os.path.join("data", "url_map.json"))
+
+    for p in candidates:
+        try:
+            if os.path.isfile(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    # normalize keys to strings
+                    return {str(k): str(v) for k, v in data.items()}
+        except Exception:
+            # best-effort; ignore malformed files
+            pass
+    return {}
+
+
+def _lookup_url(url_map: Dict[str, str], data_dir: str, abs_path: str) -> Optional[str]:
+    """Find URL for a given absolute path using several key strategies."""
+    if not url_map:
+        return None
+    # candidates: absolute, relative to data_dir, basename, stem
+    rel = os.path.relpath(abs_path, start=data_dir)
+    base = os.path.basename(abs_path)
+    stem, _ = os.path.splitext(base)
+    for key in (abs_path, rel, base, stem):
+        url = url_map.get(key)
+        if url:
+            return url
+    return None

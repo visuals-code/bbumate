@@ -1,4 +1,4 @@
-"""embed text: RAG 시스템에서 텍스트를 벡터로 변환할 때 사용하는 함수"""
+"""3. Embed text"""
 
 import os
 from typing import Optional
