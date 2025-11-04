@@ -42,26 +42,28 @@ pip install -r requirements.txt
 
 PDF를 색인(임베딩 → Chroma 저장)합니다.
 
+- 코드 기본값
+
 ```bash
-python -m src.ingestion.d003.pipeline --mode pdf \
-  --data-dir ./data \
-  --chunk-size 1000 --chunk-overlap 200
+python -m src.ingestion.d003.pipeline
 ```
 
-HTML 모드(전처리 포함)로 색인하려면:
+- 가능한 옵션들(전체)
 
 ```bash
-python -m src.ingestion.d003.pipeline --mode html \
+python -m src.ingestion.d003.pipeline \
+  --mode html \
   --data-dir ./data \
-  --chunk-size 1000 --chunk-overlap 200
+  --chunk-size 1000 \
+  --chunk-overlap 200
 ```
 
 ### 질의 테스트 (Retrieval + Generation)
 
-관련 조각을 검색하고, 프롬프트에 포함해 LLM 응답을 출력합니다.
+관련 조각을 검색하고, 프롬프트에 포함해 LLM 응답을 출력합니다. (기본 top-k는 3입니다. 필요 시 `--k`로 변경 가능.)
 
 ```bash
-python -m src.test.d003.run_query --question "신혼부부 전세자금대출 조건 알려줘" --k 3
+python -m src.test.d003.run_query --question "신혼부부 전세자금대출 조건 알려줘"
 ```
 
 출력 예시
@@ -72,5 +74,5 @@ python -m src.test.d003.run_query --question "신혼부부 전세자금대출 �
 ### 참고/주의
 
 - 현재 버전은 리포지토리 내 모든 `data/` 폴더를 재귀적으로 스캔합니다.
-- 이미지형(스캔) PDF는 `mode=html`만으로 부족할 수 있습니다. OCR 전처리를 검토하세요.
 - HTML 모드를 유지하는 이유(요약): 확장성(HTML 소스 수용), 견고성(PyPDFLoader 실패 시 우회), 정규화(BeautifulSoup로 텍스트 정제), 미래 대응(OCR 등 후처리 수용).
+- 이미지형(스캔) PDF는 `mode=html`만으로 부족할 수 있습니다. OCR 전처리를 검토하세요.

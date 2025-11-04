@@ -1,7 +1,6 @@
-"""8. Run a test query against the RAG pipeline: 이미 만들어진 Chroma 인덱스를 불러와 질문을 던지고, 검색된 청크와 최종 답변을 출력하는 질의(검색+생성) 테스트 스크립트"""
+"""8. Run a test query against the RAG pipeline: 검색된 청크와 최종 답변을 출력하는 질의 테스트 스크립트"""
 
 import argparse
-import os
 import html
 import time
 import re
@@ -9,10 +8,11 @@ from typing import List
 
 from langchain_core.documents import Document
 
-from src.chains.d003.qa_chain import answer_question
+from src.chains.d003.chain import answer_question
 from src.retrieval.d003.retriever import retrieve_relevant_documents
 
 
+# CLI 인자 정의/파싱을 해 주는 함수: argparse로 스크립트 실행 시 받는 옵션들을 등록하고, 실제 값들을 argparse.Namespace로 반환
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run a test query against the RAG pipeline"
@@ -22,9 +22,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-format",
         type=str,
-        default="html",
+        default="md",
         choices=["md", "html"],
-        help="Format of final answer: 'md' (markdown) or 'html'",
+        help="Format of final answer: 'md' or 'html'",
     )
     return parser.parse_args()
 
@@ -53,6 +53,7 @@ def format_html_answer(answer: str, docs: List[Document]) -> str:
     return "\n".join(parts)
 
 
+# 가격 용어 강조 함수: 가격 용어를 볼드처리하여 가독성 향상 (Markdown 형식)
 def emphasize_price_terms_md(text: str) -> str:
     patterns = [
         r"(?:(?:매?월|연)\s*)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*원",
@@ -67,6 +68,7 @@ def emphasize_price_terms_md(text: str) -> str:
     return text
 
 
+# 가격 용어 강조 함수: 가격 용어를 볼드처리하여 가독성 향상 (HTML 형식)
 def emphasize_price_terms_html_escaped(escaped_text: str) -> str:
     patterns = [
         r"(?:(?:매?월|연)\s*)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*원",
@@ -81,6 +83,7 @@ def emphasize_price_terms_html_escaped(escaped_text: str) -> str:
     return escaped_text
 
 
+# 줄바꿈 추가 함수: 한글 문장 끝에 줄바꿈을 추가하여 가독성 향상
 def insert_line_breaks_korean(text: str) -> str:
     text = re.sub(r"(다|요|니다)\.(\s+)", r"\1.\n\n", text)
     text = re.sub(r"\s+(또한|그리고|한편|추가로|더불어|다만|참고로),", r"\n\n\1,", text)

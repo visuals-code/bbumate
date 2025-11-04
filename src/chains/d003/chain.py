@@ -1,4 +1,4 @@
-"""7. QA Chain: build the LLM chain"""
+"""7. Chain: build the LLM chain"""
 
 import os
 from typing import List, Tuple
@@ -14,19 +14,24 @@ from src.generation.d003.prompting import build_chat_prompt, format_docs_for_con
 
 
 def build_llm() -> ChatUpstage:
-    """Initialize Upstage Chat model from environment variables."""
+    """
+    Initialize Upstage Chat model from environment variables.
+    """
     load_dotenv()
     api_key = os.getenv("UPSTAGE_API_KEY")
-    model_name = os.getenv("UPSTAGE_CHAT_MODEL", "solar-1-mini-chat")
+    model_name = os.getenv("UPSTAGE_CHAT_MODEL")
+
     if not api_key:
         raise ValueError("UPSTAGE_API_KEY is not set in environment")
+    if not model_name:
+        raise ValueError("UPSTAGE_CHAT_MODEL is not set in environment")
+
     return ChatUpstage(api_key=api_key, model=model_name)
 
 
 def build_chain(k: int = 3):
     """
     Build a RAG chain: retriever -> context formatter -> prompt -> LLM -> string output.
-    Returns a Runnable you can .invoke({"question": ...}).
     """
     retriever = get_retriever(k=k)
     prompt = build_chat_prompt()
