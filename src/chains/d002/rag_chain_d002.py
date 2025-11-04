@@ -1,6 +1,8 @@
 import os
 import time
-from typing import List, Dict, Any
+import json
+from pathlib import Path
+from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain_chroma import Chroma
@@ -15,6 +17,52 @@ load_dotenv()
 # Grade 결과 캐싱 (메모리 기반)
 # 키: (질문 해시, 문서 해시) → 값: (is_relevant, doc)
 _grade_cache: Dict[tuple[int, int], bool] = {}
+
+# 문서 출처 링크 매핑 (파일명 -> URL)
+# data/d002/document_links.json 파일에서 로드하거나, 직접 딕셔너리로 정의 가능
+_document_links: Dict[str, str] = {}
+
+
+def load_document_links(domain: str = "d002") -> Dict[str, str]:
+    """문서 출처 링크 매핑 로드.
+
+    파일명 -> URL 매핑을 JSON 파일에서 로드하거나,
+    없으면 빈 딕셔너리 반환.
+
+    JSON 파일 형식 예시:
+    {
+        "tax_credit.html": "https://example.com/tax_credit",
+        "newlywed_home_purchase_loan.html": "https://example.com/newlywed_loan"
+    }
+    """
+    global _document_links
+
+    if _document_links:
+        return _document_links
+
+    # JSON 파일 경로 확인
+    links_file = Path(f"data/{domain}/document_links.json")
+
+    if links_file.exists():
+        try:
+            with open(links_file, "r", encoding="utf-8") as f:
+                _document_links = json.load(f)
+            return _document_links
+        except Exception:
+            # JSON 로드 실패 시 빈 딕셔너리 반환
+            return {}
+
+    # JSON 파일이 없으면 빈 딕셔너리 반환
+    return {}
+
+
+def get_document_url(source: str, domain: str = "d002") -> str:
+    """문서 출처의 URL 반환.
+
+    매핑이 있으면 URL 반환, 없으면 파일명 반환.
+    """
+    links = load_document_links(domain)
+    return links.get(source, source)
 
 
 def load_vector_db(domain: str = "d002") -> Chroma:
@@ -45,48 +93,143 @@ def load_llm() -> ChatUpstage:
     return ChatUpstage(api_key=api_key, model=model)
 
 
+def extract_region_from_question(question: str) -> Optional[str]:
+    """질문에서 지역 정보 추출.
+    
+    지역 키워드:
+    - 서울, 부산, 대구, 인천, 광주, 대전, 울산, 세종
+    - 경기, 강원, 충북, 충남, 전북, 전남, 경북, 경남, 제주
+    - 수도권, 지방, 수도권외
+    """
+    region_keywords = [
+        "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
+        "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
+        "수도권", "지방", "수도권외", "경기도", "인천광역시", "서울특별시"
+    ]
+    
+    for keyword in region_keywords:
+        if keyword in question:
+            # 간단한 정리 (예: "경기도" -> "경기")
+            if keyword == "경기도":
+                return "경기"
+            elif keyword == "인천광역시":
+                return "인천"
+            elif keyword == "서울특별시":
+                return "서울"
+            return keyword
+    
+    return None
+
+
+def extract_housing_type_from_question(question: str) -> Optional[str]:
+    """질문에서 주거형태 정보 추출.
+    
+    주거형태 키워드:
+    - 전세, 월세, 반전세, 자가, 매매, 구매, 분양, 청약
+    """
+    housing_keywords = [
+        "전세", "월세", "반전세", "자가", "매매", "구매", "분양", "청약"
+    ]
+    
+    for keyword in housing_keywords:
+        if keyword in question:
+            return keyword
+    
+    return None
+
+
+def apply_region_housing_priority(
+    question: str,
+    preset_region: Optional[str],
+    preset_housing_type: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    """지역/주거형태 우선순위 적용.
+    
+    우선순위: 질문 속 지역/주거형태 > 사전 선택 지역/주거형태
+    
+    Returns:
+        (최종 지역, 최종 주거형태)
+    """
+    # 질문에서 추출
+    question_region = extract_region_from_question(question)
+    question_housing_type = extract_housing_type_from_question(question)
+    
+    # 우선순위 적용
+    final_region = question_region if question_region else preset_region
+    final_housing_type = question_housing_type if question_housing_type else preset_housing_type
+    
+    return final_region, final_housing_type
+
+
 def is_question_clear(question: str) -> bool:
     """규칙 기반으로 질문이 명확한지 빠르게 판단 (LLM 호출 없이).
-    
+
     명확한 질문의 특징:
     - 구체적인 키워드 포함 (전세자금, 대출, 세금, 주택 등)
     - 길이가 적절함 (5자 이상)
     - 단일 단어나 매우 짧은 질문 아님
-    
+
     Returns:
         명확하면 True, 모호하면 False
     """
     question = question.strip()
-    
+
     # 너무 짧으면 모호함
     if len(question) < 5:
         return False
-    
+
     # 단일 단어만 있으면 모호함
     if len(question.split()) < 2:
         return False
-    
+
     # 신혼부부 지원정책 관련 키워드 체크
     domain_keywords = [
-        "신혼부부", "전세", "자금", "대출", "주택", "구입", "매매",
-        "세금", "세액", "공제", "혜택", "청약", "공급", "전세자금",
-        "구입자금", "주택청약", "특별공급", "버팀목", "디딤돌"
+        "신혼부부",
+        "전세",
+        "자금",
+        "대출",
+        "주택",
+        "구입",
+        "매매",
+        "세금",
+        "세액",
+        "공제",
+        "혜택",
+        "청약",
+        "공급",
+        "전세자금",
+        "구입자금",
+        "주택청약",
+        "특별공급",
+        "버팀목",
+        "디딤돌",
     ]
-    
+
     # 도메인 키워드가 있으면 명확함
     if any(keyword in question for keyword in domain_keywords):
         return True
-    
+
     # 기본 질문 패턴 체크
     question_patterns = [
-        "조건", "한도", "금리", "혜택", "신청", "방법", "절차",
-        "요건", "자격", "대상", "기간", "금액", "율"
+        "조건",
+        "한도",
+        "금리",
+        "혜택",
+        "신청",
+        "방법",
+        "절차",
+        "요건",
+        "자격",
+        "대상",
+        "기간",
+        "금액",
+        "율",
     ]
-    
+
     # 질문 패턴이 있으면 명확함
     if any(pattern in question for pattern in question_patterns):
         return True
-    
+
     # 기본적으로는 모호함으로 판단
     return False
 
@@ -108,7 +251,7 @@ def _format_docs(docs: List[Any]) -> str:
 
 def validate_question(question: str, llm_model) -> tuple[bool, str, str]:
     """질문 검증: 도메인 관련성 + 명확성 동시 체크.
-    
+
     Returns:
         (is_valid, reason, clarification_question)
         - is_valid: 질문이 유효하면 True, 아니면 False
@@ -134,24 +277,24 @@ def validate_question(question: str, llm_model) -> tuple[bool, str, str]:
         ]
     )
     validation_chain = validation_prompt | llm_model | StrOutputParser()
-    
+
     try:
         result = validation_chain.invoke({"question": question}).upper()
-        
+
         # 도메인 체크
         is_domain_ok = "DOMAIN_OK" in result
         if not is_domain_ok:
             return (False, "domain", "")
-        
+
         # 명확성 체크
         is_ambiguous = "AMBIGUOUS" in result
         if is_ambiguous:
             clarification_question = clarify_question(question, llm_model)
             return (False, "ambiguity", clarification_question)
-        
+
         # 통과
         return (True, "", "")
-        
+
     except Exception:
         # 평가 실패 시 유효하다고 가정 (안전장치)
         return (True, "", "")
@@ -169,11 +312,14 @@ def clarify_question(question: str, llm_model) -> str:
                 "예: '거주 지역(서울/수도권/지방)과 주거형태(전세/매매)를 알려주세요.' "
                 "너무 구체적이거나 여러 질문을 나열하지 마세요.",
             ),
-            ("human", "모호한 질문: {question}\n\n간결한 명확화 질문(1-2개 핵심 정보만):"),
+            (
+                "human",
+                "모호한 질문: {question}\n\n간결한 명확화 질문(1-2개 핵심 정보만):",
+            ),
         ]
     )
     clarify_chain = clarify_prompt | llm_model | StrOutputParser()
-    
+
     try:
         clarified = clarify_chain.invoke({"question": question})
         return clarified.strip()
@@ -195,7 +341,7 @@ def rewrite_query(question: str, llm_model) -> str:
         ]
     )
     rewrite_chain = rewrite_prompt | llm_model | StrOutputParser()
-    
+
     try:
         rewritten = rewrite_chain.invoke({"question": question})
         return rewritten.strip()
@@ -203,22 +349,27 @@ def rewrite_query(question: str, llm_model) -> str:
         return question
 
 
-def web_search(query: str) -> str:
+def web_search(query: str) -> tuple[str, List[Dict[str, str]]]:
     """웹 검색 실행 (Tavily API 사용).
-    
+
     Returns:
-        검색 결과를 문자열로 반환. API 호출 실패 시 더미 응답 반환.
+        (검색 결과 텍스트, 검색 결과 리스트) 튜플 반환.
+        검색 결과 리스트는 {"title": str, "url": str} 딕셔너리 리스트.
+        API 호출 실패 시 더미 응답과 빈 리스트 반환.
     """
     try:
         from tavily import TavilyClient
-        
+
         api_key = os.getenv("TAVILY_API_KEY")
         if not api_key:
             # API 키가 없으면 더미 응답 반환 (개발/테스트 환경)
-            return f"[웹 검색 결과] '{query}'에 대한 최신 정보를 찾을 수 없습니다. TAVILY_API_KEY가 설정되지 않았습니다."
-        
+            return (
+                f"[웹 검색 결과] '{query}'에 대한 최신 정보를 찾을 수 없습니다. TAVILY_API_KEY가 설정되지 않았습니다.",
+                [],
+            )
+
         client = TavilyClient(api_key=api_key)
-        
+
         # Tavily API 호출
         # search_depth: "basic" (빠름) 또는 "advanced" (더 상세)
         response = client.search(
@@ -226,48 +377,97 @@ def web_search(query: str) -> str:
             search_depth="basic",
             max_results=3,  # 상위 3개 결과만 사용
         )
-        
-        # 검색 결과 포맷팅
+
+        # 검색 결과 포맷팅 및 메타데이터 추출
         if response.get("results"):
             results_text = []
+            web_results = []
             for i, result in enumerate(response["results"], 1):
                 title = result.get("title", "")
                 content = result.get("content", "")
                 url = result.get("url", "")
-                
-                results_text.append(
-                    f"[결과 {i}] {title}\n{content}\n출처: {url}"
-                )
-            
-            return "\n\n---\n\n".join(results_text)
+
+                if url:
+                    web_results.append({"title": title, "url": url})
+
+                results_text.append(f"[결과 {i}] {title}\n{content}\n출처: {url}")
+
+            return "\n\n---\n\n".join(results_text), web_results
         else:
-            return f"[웹 검색 결과] '{query}'에 대한 검색 결과를 찾을 수 없습니다."
-            
+            return (
+                f"[웹 검색 결과] '{query}'에 대한 검색 결과를 찾을 수 없습니다.",
+                [],
+            )
+
     except ImportError:
         # tavily-python 패키지가 설치되지 않은 경우
-        return f"[웹 검색 결과] '{query}'에 대한 최신 정보를 찾을 수 없습니다. tavily-python 패키지가 설치되지 않았습니다."
+        return (
+            f"[웹 검색 결과] '{query}'에 대한 최신 정보를 찾을 수 없습니다. tavily-python 패키지가 설치되지 않았습니다.",
+            [],
+        )
     except Exception as e:
         # API 호출 실패 시 더미 응답 반환
-        return f"[웹 검색 결과] '{query}'에 대한 최신 정보를 찾을 수 없습니다. 검색 중 오류 발생: {str(e)}"
+        return (
+            f"[웹 검색 결과] '{query}'에 대한 최신 정보를 찾을 수 없습니다. 검색 중 오류 발생: {str(e)}",
+            [],
+        )
 
 
-def generate_with_web_context(question: str, web_results: str, llm_model) -> str:
+def generate_with_web_context(
+    question: str, 
+    web_results: str, 
+    llm_model,
+    region: Optional[str] = None,
+    housing_type: Optional[str] = None,
+) -> str:
     """웹 검색 결과를 컨텍스트로 사용하여 답변 생성."""
+    # 지역/주거형태 컨텍스트 정보 생성
+    context_info = []
+    if region:
+        context_info.append(f"거주 지역: {region}")
+    if housing_type:
+        context_info.append(f"주거형태: {housing_type}")
+    user_context = "\n".join(context_info) if context_info else None
+    
+    # 프롬프트 템플릿 구성 (컨텍스트 유무에 따라 다르게)
+    if user_context:
+        system_prompt = (
+            "당신은 신혼부부 지원정책 도메인 전문가입니다. "
+            "웹 검색 결과를 참고하여 질문에 답변하세요. "
+            "정보가 충분하지 않으면 모른다고 답하세요.\n\n"
+            "사용자 컨텍스트:\n{user_context}\n\n"
+            "답변은 마크다운 형식으로 작성하세요:\n"
+            "- 금액(예: 100만원, 3억원)과 비율(예: 50%, 3.5%)은 **굵게** 처리\n"
+            "- 문장 단위로 줄바꿈 (마침표, 느낌표, 물음표 뒤)\n"
+            "- 사용자 컨텍스트 정보(지역, 주거형태)가 제공되면 해당 정보를 고려하여 답변하세요."
+        )
+    else:
+        system_prompt = (
+            "당신은 신혼부부 지원정책 도메인 전문가입니다. "
+            "웹 검색 결과를 참고하여 질문에 답변하세요. "
+            "정보가 충분하지 않으면 모른다고 답하세요.\n\n"
+            "답변은 마크다운 형식으로 작성하세요:\n"
+            "- 금액(예: 100만원, 3억원)과 비율(예: 50%, 3.5%)은 **굵게** 처리\n"
+            "- 문장 단위로 줄바꿈 (마침표, 느낌표, 물음표 뒤)"
+        )
+    
     web_prompt = ChatPromptTemplate.from_messages(
         [
-            (
-                "system",
-                "당신은 신혼부부 지원정책 도메인 전문가입니다. "
-                "웹 검색 결과를 참고하여 질문에 답변하세요. "
-                "정보가 충분하지 않으면 모른다고 답하세요.",
-            ),
+            ("system", system_prompt),
             ("human", "질문: {question}\n\n웹 검색 결과:\n{web_results}"),
         ]
     )
     web_chain = web_prompt | llm_model | StrOutputParser()
-    
+
     try:
-        answer = web_chain.invoke({"question": question, "web_results": web_results})
+        invoke_params = {
+            "question": question,
+            "web_results": web_results,
+        }
+        if user_context:
+            invoke_params["user_context"] = user_context
+        
+        answer = web_chain.invoke(invoke_params)
         return answer.strip()
     except Exception:
         return "죄송합니다. 웹 검색 결과를 기반으로 답변을 생성할 수 없습니다."
@@ -279,11 +479,11 @@ def _grade_single_doc(question: str, doc_content: str, grade_chain) -> bool:
     question_hash = hash(question[:100])  # 질문 앞부분 해시
     doc_hash = hash(doc_content[:1500])  # 문서 앞부분 해시
     cache_key = (question_hash, doc_hash)
-    
+
     # 캐시 확인
     if cache_key in _grade_cache:
         return _grade_cache[cache_key]
-    
+
     # 캐시 미스 → LLM 평가
     try:
         grade = grade_chain.invoke({"question": question, "context": doc_content})
@@ -291,17 +491,17 @@ def _grade_single_doc(question: str, doc_content: str, grade_chain) -> bool:
     except Exception:
         # 평가 실패 시 관련 있다고 가정 (안전장치)
         is_relevant = True
-    
+
     # 캐시 저장 (최대 1000개 항목으로 제한하여 메모리 관리)
     if len(_grade_cache) < 1000:
         _grade_cache[cache_key] = is_relevant
-    
+
     return is_relevant
 
 
 def grade_docs(question: str, docs: List[Any], llm_model) -> List[Any]:
     """retrieved 문서 중 관련도 높은 것만 필터링 (Grade 단계).
-    
+
     병렬 처리로 성능 개선: k=3 문서를 동시에 평가하여 시간 절약.
     결과 품질은 동일하며, 순서는 원본 문서 순서 유지.
     """
@@ -339,10 +539,9 @@ def grade_docs(question: str, docs: List[Any], llm_model) -> List[Any]:
     with ThreadPoolExecutor(max_workers=min(len(docs), 3)) as executor:
         # 원본 인덱스와 함께 평가 작업 제출
         future_to_index = {
-            executor.submit(evaluate_doc, (i, doc)): i
-            for i, doc in enumerate(docs)
+            executor.submit(evaluate_doc, (i, doc)): i for i, doc in enumerate(docs)
         }
-        
+
         # 결과 수집 (원본 순서 유지)
         results = {}
         for future in as_completed(future_to_index):
@@ -353,7 +552,7 @@ def grade_docs(question: str, docs: List[Any], llm_model) -> List[Any]:
                 # 평가 실패 시 관련 있다고 가정 (안전장치)
                 index = future_to_index[future]
                 results[index] = (docs[index], True)
-        
+
         # 원본 순서대로 필터링
         for i in range(len(docs)):
             doc, is_relevant = results[i]
@@ -365,7 +564,7 @@ def grade_docs(question: str, docs: List[Any], llm_model) -> List[Any]:
 
 def build_rag_chain(domain: str = "d002", use_grade: bool = True):
     """RAG 체인 구성 요소 로드 (Grade 단계는 run_rag에서 직접 처리).
-    
+
     Note: Grade 단계가 있어서 체인을 완전히 구성하기 어려움.
     대신 필요한 컴포넌트(vectordb, retriever, llm)만 반환하고,
     실제 RAG 체인은 run_rag에서 Grade 포함하여 구성함.
@@ -385,9 +584,11 @@ def run_rag(
     verbose: bool = False,
     use_grade: bool = True,
     use_validation: bool = True,
+    region: Optional[str] = None,
+    housing_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """RAG 파이프라인 실행 (Question Validation → Retrieve → Grade → Generate).
-    
+
     플로우:
     1. Question Validation: 도메인 관련성 + 명확성 동시 체크
        - 통과 못하면 → Re-ask/Clarification 또는 도메인 외 에러
@@ -399,6 +600,15 @@ def run_rag(
     start = time.perf_counter()
     retriever, llm, grade_enabled = build_rag_chain(domain, use_grade=use_grade)
 
+    # 지역/주거형태 우선순위 적용
+    final_region, final_housing_type = apply_region_housing_priority(
+        query, region, housing_type
+    )
+    
+    if verbose:
+        if final_region or final_housing_type:
+            print(f"[컨텍스트] 지역: {final_region or '미지정'}, 주거형태: {final_housing_type or '미지정'}")
+
     # Question Validation: 도메인 관련성 + 명확성 동시 체크 (선택적 스킵)
     if use_validation:
         # 명확한 질문이면 validation 스킵하여 성능 향상
@@ -409,12 +619,12 @@ def run_rag(
         else:
             # 모호한 질문이면 LLM으로 validation 실행
             is_valid, reason, clarification_question = validate_question(query, llm)
-            
+
             if not is_valid:
                 if reason == "domain":
                     if verbose:
                         print("[도메인 관련성 없음]")
-                    
+
                     return {
                         "answer": "죄송합니다. 신혼부부 지원정책(주거, 대출, 전세자금, 구매자금 등) 관련 질문만 답변드릴 수 있습니다. 다른 주제의 질문은 처리할 수 없습니다.",
                         "sources": [],
@@ -423,12 +633,12 @@ def run_rag(
                         "clarification_needed": False,
                         "web_search_used": False,
                     }
-                
+
                 elif reason == "ambiguity":
                     if verbose:
                         print("[질문 모호성 감지]")
                         print(f"[명확화 요청]: {clarification_question}")
-                    
+
                     return {
                         "answer": f"질문을 더 명확히 해주세요.\n\n{clarification_question}",
                         "sources": [],
@@ -452,14 +662,17 @@ def run_rag(
     if graded_docs:
         # Grade Yes: 관련 문서가 있음 → RAG 체인으로 Generate
         context = _format_docs(graded_docs)
+
+        # 지역/주거형태 컨텍스트 정보 생성
+        context_info = []
+        if final_region:
+            context_info.append(f"거주 지역: {final_region}")
+        if final_housing_type:
+            context_info.append(f"주거형태: {final_housing_type}")
+        context_str = "\n".join(context_info) if context_info else None
         
-        # RAG 체인 구성: Context + Question → Generate
-        rag_prompt = ChatPromptTemplate.from_messages(
-            [
-                    (
-                        "system",
-                        """
-당신은 신혼부부 지원정책 도메인 전문가입니다.
+        # 기본 프롬프트 구성
+        base_prompt = """당신은 신혼부부 지원정책 도메인 전문가입니다.
 
 규칙:
 1. 컨텍스트에 명확하게 나와있는 정보만 답변하세요. 컨텍스트에 없는 내용은 절대 추가하지 마세요.
@@ -467,71 +680,111 @@ def run_rag(
 3. 답변은 자연스럽고 읽기 쉽게 작성하세요. "제공된 문서에는...", "○○ 문서에 따르면..." 같은 표현을 사용하지 마세요.
 4. 문서명이나 파일명을 직접 언급하지 마세요.
 5. 컨텍스트에 나와있는 정보를 연결하거나 확장하지 마세요. 정확히 명시된 내용만 답변하세요.
+6. 답변은 마크다운 형식으로 작성하세요:
+   - 금액(예: 100만원, 3억원)과 비율(예: 50%, 3.5%)은 **굵게** 처리
+   - 문장 단위로 줄바꿈 (마침표, 느낌표, 물음표 뒤)"""
+        
+        # 사용자 컨텍스트가 있으면 추가
+        if context_str:
+            user_context_section = f"""
+7. 사용자 컨텍스트 정보(지역, 주거형태)가 제공되면 해당 정보를 고려하여 답변하세요.
+
+사용자 컨텍스트:
+{context_str}
 
 예시:
 - 질문: "재테크 방법 알려줘" → 답변: "제공된 문서에는 재테크 방법에 대한 정보가 없습니다. 신혼부부 지원정책(대출, 세금 혜택 등) 관련 질문만 답변드릴 수 있습니다."
-- 질문: "전세자금대출 조건 알려줘" → 답변: 컨텍스트에 나와있는 조건을 정확히 답변
+- 질문: "전세자금대출 조건 알려줘" → 답변: 컨텍스트에 나와있는 조건을 정확히 답변 (금액/비율은 **굵게**, 문장 단위 줄바꿈)
+- 사용자 컨텍스트가 "{context_str}"인 경우: 해당 지역/주거형태의 정보를 우선적으로 답변"""
+        else:
+            user_context_section = """
 
-컨텍스트:\n{context}
-         """.strip(),
-                    ),
+예시:
+- 질문: "재테크 방법 알려줘" → 답변: "제공된 문서에는 재테크 방법에 대한 정보가 없습니다. 신혼부부 지원정책(대출, 세금 혜택 등) 관련 질문만 답변드릴 수 있습니다."
+- 질문: "전세자금대출 조건 알려줘" → 답변: 컨텍스트에 나와있는 조건을 정확히 답변 (금액/비율은 **굵게**, 문장 단위 줄바꿈)"""
+        
+        system_prompt = f"{base_prompt}{user_context_section}\n\n컨텍스트:\n{{context}}".strip()
+        
+        # RAG 체인 구성: Context + Question → Generate
+        rag_prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
                 ("human", "질문: {question}"),
             ]
         )
-        
+
         # RAG 체인: 질문 + 컨텍스트 → LLM → 답변
         rag_chain = rag_prompt | llm | StrOutputParser()
         answer = rag_chain.invoke({"question": query, "context": context})
-        
+
         # 답변에서 "정보가 없습니다" 패턴 감지 → Web Search 경로로 전환
-        no_info_keywords = ["정보가 없습니다", "해당 정보가 없습니다", "없습니다", "찾을 수 없습니다"]
+        no_info_keywords = [
+            "정보가 없습니다",
+            "해당 정보가 없습니다",
+            "없습니다",
+            "찾을 수 없습니다",
+        ]
         if any(keyword in answer for keyword in no_info_keywords):
             # 문서로 답변 불가능 → Web Search 경로로 전환
             use_web_search = True
-            
+
             if verbose:
                 print("[Generate 결과: 정보 없음 → Web Search 경로로 전환]")
-            
+
             # Re-write query
             rewritten_query = rewrite_query(query, llm)
-            
+
             if verbose:
                 print(f"[쿼리 재작성]: {rewritten_query}")
-            
+
             # Web Search
-            web_results = web_search(rewritten_query)
-            
+            web_results, web_metadata = web_search(rewritten_query)
+
             if verbose:
                 print("[웹 검색 완료]")
-            
+
             # Generate with Web Search results
-            answer = generate_with_web_context(query, web_results, llm)
-            sources = ["웹 검색"]
+            answer = generate_with_web_context(
+                query, web_results, llm, final_region, final_housing_type
+            )
+            # 웹 검색 메타데이터를 sources 형태로 변환
+            sources = (
+                [{"title": item["title"], "url": item["url"]} for item in web_metadata]
+                if web_metadata
+                else ["웹 검색"]
+            )
         else:
             # 답변 성공
-            sources = list({d.metadata.get("source", "unknown") for d in graded_docs})
+            # 문서 출처 파일명 반환 (URL 매핑은 API에서 처리)
+            source_set = {d.metadata.get("source", "unknown") for d in graded_docs}
+            sources = list(source_set)
     else:
         # Grade No: 관련 문서가 없음 → Re-write query → Web Search → Generate
         use_web_search = True
-        
+
         if verbose:
             print("[Grade 결과: 관련 문서 없음]")
-        
+
         # Re-write query
         rewritten_query = rewrite_query(query, llm)
-        
+
         if verbose:
             print(f"[쿼리 재작성]: {rewritten_query}")
-        
+
         # Web Search
-        web_results = web_search(rewritten_query)
-        
+        web_results, web_metadata = web_search(rewritten_query)
+
         if verbose:
             print("[웹 검색 완료]")
-        
+
         # Generate with Web Search results
         answer = generate_with_web_context(query, web_results, llm)
-        sources = ["웹 검색"]
+        # 웹 검색 메타데이터를 sources 형태로 변환
+        sources = (
+            [{"title": item["title"], "url": item["url"]} for item in web_metadata]
+            if web_metadata
+            else ["웹 검색"]
+        )
 
     # sources는 위에서 이미 설정됨 (웹 검색 경로 또는 문서 경로)
     duration_ms = int((time.perf_counter() - start) * 1000)

@@ -1,5 +1,6 @@
 import os
 import argparse
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
@@ -161,6 +162,7 @@ def embed_from_html(
 
     try:
         logger.info("임베딩 및 VectorDB 생성 중... (시간이 걸릴 수 있습니다)")
+        embedding_start_time = time.perf_counter()
 
         # 배치 처리로 메모리 효율성 개선
         # - 대용량(수천 청크)에서 한 번에 from_documents를 호출하면 메모리/시간 급증
@@ -189,6 +191,8 @@ def embed_from_html(
             )
 
         # from_documents는 생성 시 저장되며, add_documents는 자동 반영됨
+        embedding_elapsed = time.perf_counter() - embedding_start_time
+        print(f"[임베딩 완료] 총 소요 시간: {embedding_elapsed:.2f}초 ({embedding_elapsed/60:.2f}분)")
 
     except Exception as e:
         raise RuntimeError(f"VectorDB 생성 실패: {e}")
@@ -266,3 +270,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# 실행
+# 기본 설정으로 실행
+# python src/ingestion/d002/embed_store.py --domain d002
+
+# 커스텀 청크 크기로 실행
+# python src/ingestion/d002/embed_store.py --domain d002 --chunk-size 1500 --chunk-overlap 150
