@@ -33,7 +33,7 @@ def process_pdf_directory(pdf_directory: str) -> list[Document]:
             print(f"    - 청크 {len(chunks)}개 추출 완료.")
 
         except Exception as e:
-            print(f"    - !!! 오류 발생 ({file_path.name}): {e}")
+            print(f"    - 오류 발생 ({file_path.name}): {e}")
             print(f"    - 오류 발생 파일 경로: {file_path}")
 
     return all_documents

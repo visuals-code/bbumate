@@ -6,9 +6,8 @@ from langchain_core.documents import Document
 import os
 
 
+# 검색된 문서의 관련성을 평가
 class DocumentGrader:
-    """검색된 문서의 관련성을 평가하는 클래스"""
-
     def __init__(self, api_key: str = None, model: str = None):
         self.api_key = api_key or os.getenv("UPSTAGE_API_KEY")
         self.model = model or os.getenv("UPSTAGE_CHAT_MODEL", "solar-1-mini-chat")
@@ -37,18 +36,8 @@ class DocumentGrader:
 
         self.grading_chain = self.grading_prompt | self.llm | StrOutputParser()
 
+    # 검색된 문서들을 평가하여 관련 있는 문서만 필터링
     def grade_documents(self, question: str, documents: List[Document]) -> dict:
-        """
-        검색된 문서들을 평가하여 관련 있는 문서만 필터링
-
-        Returns:
-            {
-                "relevant_documents": List[Document],
-                "irrelevant_count": int,
-                "total_count": int,
-                "needs_web_search": bool
-            }
-        """
         relevant_docs = []
         irrelevant_count = 0
 
@@ -76,8 +65,9 @@ class DocumentGrader:
             "needs_web_search": needs_web_search,
         }
 
+    # 단일 문서의 관련성 평가
     def grade_single_document(self, question: str, document: Document) -> bool:
-        """단일 문서의 관련성 평가"""
+
         result = self.grading_chain.invoke(
             {"question": question, "document": document.page_content}
         )

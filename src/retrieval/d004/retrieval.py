@@ -8,29 +8,29 @@ from typing import List
 
 def load_retriever(
     db_path: str = "./chroma_storage",
-    collection_name: str = "pdf_subscription_chunks",
+    collection_name: str = "pdf_promotion_chunks",
     k: int = 3,
     search_type: str = "similarity",
 ) -> VectorStoreRetriever:
 
-    # 환경 변수 로드
     load_dotenv()
     api_key = os.getenv("UPSTAGE_API_KEY")
     model = os.getenv("UPSTAGE_EMBEDDING_MODEL", "solar-embedding-1-large")
-    # Upstage Embeddings 초기화
+
     embeddings = UpstageEmbeddings(api_key=api_key, model=model)
 
-    # ChromaDB 로드
     vectorstore = Chroma(
         persist_directory=db_path,
         embedding_function=embeddings,
         collection_name=collection_name,
     )
 
-    # Retriever 생성
     retriever = vectorstore.as_retriever(
         search_type=search_type, search_kwargs={"k": k}
     )
+
+    # vectorstore 참조를 retriever에 추가
+    retriever.vectorstore = vectorstore
 
     return retriever
 

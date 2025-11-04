@@ -4,8 +4,8 @@ from langchain_core.output_parsers import StrOutputParser
 import os
 
 
+# 검색 결과가 좋지 않을 때 질문을 재작성
 class QueryRewriter:
-    """검색 결과가 좋지 않을 때 질문을 재작성하는 클래스"""
 
     def __init__(self, api_key: str = None, model: str = None):
         self.api_key = api_key or os.getenv("UPSTAGE_API_KEY")
@@ -36,33 +36,15 @@ class QueryRewriter:
         self.rewrite_chain = self.rewrite_prompt | self.llm | StrOutputParser()
 
     def rewrite(self, question: str) -> str:
-        """
-        질문을 재작성하여 더 나은 검색 결과를 얻을 수 있도록 함
-
-        Args:
-            question: 원본 질문
-
-        Returns:
-            재작성된 질문
-        """
         rewritten = self.rewrite_chain.invoke({"question": question})
         return rewritten.strip()
 
+    # 이전 시도 횟수를 고려하여 질문 재작성
     def rewrite_with_history(self, question: str, failed_attempts: int = 0) -> str:
-        """
-        이전 시도 횟수를 고려하여 질문 재작성
-
-        Args:
-            question: 원본 질문
-            failed_attempts: 실패한 시도 횟수
-
-        Returns:
-            재작성된 질문
-        """
         if failed_attempts == 0:
             return self.rewrite(question)
 
-        # 실패 횟수가 많을수록 더 다양한 접근 시도
+        # 다양한 접근 시도
         enhanced_prompt = ChatPromptTemplate.from_messages(
             [
                 (
