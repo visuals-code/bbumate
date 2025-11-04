@@ -78,10 +78,18 @@ UPSTAGE_API_KEY=YOUR_UPSTAGE_API_KEY
 UPSTAGE_EMBEDDING_MODEL=solar-embedding-1-large
 UPSTAGE_CHAT_MODEL=solar-1-mini-chat
 CHROMA_DB_DIR=./chroma_storage
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+LANGCHAIN_API_KEY=YOUR_LANGSMITH_API_KEY
+LANGCHAIN_PROJECT=your-project-name
 ```
 
 - `UPSTAGE_EMBEDDING_MODEL` / `UPSTAGE_CHAT_MODEL`: 필요 시 모델명을 교체하여 실험 가능
 - `CHROMA_DB_DIR`: Chroma 퍼시스트 디렉터리 경로
+- `LANGCHAIN_TRACING_V2`: `true`로 설정 시 LangSmith 추적 활성화
+- `LANGCHAIN_ENDPOINT`: LangSmith 엔드포인트 (기본 `https://api.smith.langchain.com`)
+- `LANGCHAIN_API_KEY`: 발급받은 LangSmith API 키
+- `LANGCHAIN_PROJECT`: 프로젝트명 (해당 이름으로 Run이 그룹화됨)
 
 ### 8. 설치 및 실행 방법
 

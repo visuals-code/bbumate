@@ -30,6 +30,15 @@
 - `UPSTAGE_CHAT_MODEL`: 대화형 LLM 모델명 (예: `solar-1-mini-chat`)
 - `CHROMA_DB_DIR`: Chroma 벡터 스토어 퍼시스트 디렉터리 경로 (예: `./chroma_storage`)
 
+선택: LangSmith 추적을 원하면 아래를 추가하세요.
+
+```dotenv
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+LANGCHAIN_API_KEY=YOUR_LANGSMITH_API_KEY
+LANGCHAIN_PROJECT=your-project-name
+```
+
 ### 설치
 
 프로젝트 루트에서 의존성을 설치하세요.

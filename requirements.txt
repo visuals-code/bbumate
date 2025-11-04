@@ -25,6 +25,9 @@ tqdm>=4.66,<5
 # Web Search
 tavily-python>=0.3.0
 
+# LangSmith tracing (optional)
+langsmith>=0.1.33
+
 # PDF processing (for PDFMinerPDFasHTMLLoader)
 pdfminer.six>=20221105
 
