@@ -1,5 +1,6 @@
 import os
 import argparse
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
@@ -16,8 +17,12 @@ from langchain_community.vectorstores import Chroma
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-# ✅ .env 로드
+# .env 로드
 load_dotenv()
+
+# 청킹 파라미터 상수
+DEFAULT_CHUNK_SIZE = 1000
+DEFAULT_CHUNK_OVERLAP = 100
 
 
 def extract_text_from_html(html_content: str) -> str:
@@ -31,8 +36,10 @@ def extract_text_from_html(html_content: str) -> str:
         # script, style 태그 제거
         for script in soup(["script", "style"]):
             script.decompose()
+
         text = soup.get_text(separator="\n", strip=True)
         return text
+
     except Exception as e:
         logger.warning(f"HTML 파싱 실패, raw text 사용: {e}")
         return html_content
@@ -44,6 +51,7 @@ def load_html_documents(input_dir: Path) -> list[Document]:
     - 파일 단위 실패는 전체 배치를 중단하지 않고 로그만 남기고 계속 진행한다.
     - 메타데이터에 원본 경로/길이를 저장해 추적성과 디버깅을 돕는다.
     """
+
     if not input_dir.exists():
         raise FileNotFoundError(f"입력 디렉토리가 없습니다: {input_dir}")
 
@@ -54,7 +62,7 @@ def load_html_documents(input_dir: Path) -> list[Document]:
     documents = []
     failed_files = []
 
-    logger.info(f"📁 {len(html_files)}개 HTML 파일 발견")
+    logger.info(f"{len(html_files)}개 HTML 파일 발견")
     for file_path in tqdm(html_files, desc="HTML 로딩"):
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -77,14 +85,15 @@ def load_html_documents(input_dir: Path) -> list[Document]:
                     },
                 )
             )
+
         except Exception as e:
             logger.error(f"{file_path.name} 로드 실패: {e}")
             failed_files.append(file_path.name)
 
     if failed_files:
         logger.warning(
-            f"실패한 파일 ({len(failed_files)}개): {', '.join(failed_files[:5])}" +
-            (f" 외 {len(failed_files)-5}개" if len(failed_files) > 5 else "")
+            f"실패한 파일 ({len(failed_files)}개): {', '.join(failed_files[:5])}"
+            + (f" 외 {len(failed_files)-5}개" if len(failed_files) > 5 else "")
         )
 
     return documents
@@ -94,8 +103,8 @@ def embed_from_html(
     input_dir: Path,
     persist_dir: Path,
     collection_name: str,
-    chunk_size: int = 1000,
-    chunk_overlap: int = 100,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ):
     """HTML 파일들을 임베딩하여 VectorDB에 저장.
 
@@ -103,15 +112,15 @@ def embed_from_html(
     - 진행률/요약 로깅을 통해 대량 처리 시 가시성을 확보한다.
     """
 
-    # 1️⃣ HTML 문서 로드
+    # HTML 문서 로드
     logger.info(f"HTML 파일 로드 중: {input_dir}")
     documents = load_html_documents(input_dir)
-    logger.info(f"📄 {len(documents)}개 HTML 파일 로드 완료")
+    logger.info(f"{len(documents)}개 HTML 파일 로드 완료")
 
     if not documents:
         raise ValueError("처리할 문서가 없습니다.")
 
-    # 2️⃣ 텍스트 분할
+    # 텍스트 분할
     logger.info("텍스트 분할 중...")
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -125,42 +134,45 @@ def embed_from_html(
     # - 검색 결과가 원문에서 어느 위치인지 추적하기 위한 최소 정보
     for i, split in enumerate(splits):
         split.metadata["chunk_index"] = i
+
     logger.info(
-        f"✂️ 총 {len(splits)}개 청크로 분할 완료 (chunk={chunk_size}, overlap={chunk_overlap})"
+        f"총 {len(splits)}개 청크로 분할 완료 (chunk={chunk_size}, overlap={chunk_overlap})"
     )
 
     # 예상 비용 안내 (선택사항)
     total_chars = sum(len(doc.page_content) for doc in splits)
-    logger.info(f"💡 총 {total_chars:,}자 임베딩 예정 (약 {len(splits)}회 API 호출)")
+    logger.info(f"총 {total_chars:,}자 임베딩 예정 (약 {len(splits)}회 API 호출)")
 
-    # 3️⃣ Upstage 임베딩 초기화
+    # Upstage 임베딩 초기화
     api_key = os.getenv("UPSTAGE_API_KEY")
     if not api_key:
-        raise ValueError("🚨 환경변수 UPSTAGE_API_KEY가 없습니다 (.env 확인).")
+        raise ValueError("환경변수 UPSTAGE_API_KEY가 없습니다 (.env 확인).")
 
     try:
         # 임베딩 모델은 환경변수로 교체 가능. 기본값은 Upstage 표준 임베딩 모델.
         embedding_model = os.getenv("UPSTAGE_EMBEDDING_MODEL", "embedding-query")
         embeddings = UpstageEmbeddings(api_key=api_key, model=embedding_model)
-        logger.info(f"🔧 임베딩 모델: {embedding_model}")
+        logger.info(f"임베딩 모델: {embedding_model}")
+
     except Exception as e:
         raise ValueError(f"Upstage 임베딩 초기화 실패: {e}")
 
-    # 4️⃣ Chroma VectorDB 저장
+    # Chroma VectorDB 저장
     persist_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        logger.info("⏳ 임베딩 및 VectorDB 생성 중... (시간이 걸릴 수 있습니다)")
+        logger.info("임베딩 및 VectorDB 생성 중... (시간이 걸릴 수 있습니다)")
+        embedding_start_time = time.perf_counter()
 
         # 배치 처리로 메모리 효율성 개선
         # - 대용량(수천 청크)에서 한 번에 from_documents를 호출하면 메모리/시간 급증
         # - 1회 생성 후 add_documents로 증분 추가하여 안정성 확보
         batch_size = 100
         if len(splits) > batch_size:
-            logger.info(f"📦 {batch_size}개씩 배치 처리")
+            logger.info(f"{batch_size}개씩 배치 처리")
             vectordb = None
             for i in tqdm(range(0, len(splits), batch_size), desc="임베딩"):
-                batch = splits[i:i + batch_size]
+                batch = splits[i : i + batch_size]
                 if vectordb is None:
                     vectordb = Chroma.from_documents(
                         documents=batch,
@@ -179,11 +191,13 @@ def embed_from_html(
             )
 
         # from_documents는 생성 시 저장되며, add_documents는 자동 반영됨
+        embedding_elapsed = time.perf_counter() - embedding_start_time
+        print(f"[임베딩 완료] 총 소요 시간: {embedding_elapsed:.2f}초 ({embedding_elapsed/60:.2f}분)")
 
     except Exception as e:
         raise RuntimeError(f"VectorDB 생성 실패: {e}")
 
-    # 5️⃣ 결과 확인
+    # 결과 확인
     try:
         # 실제 문서의 단어로 검색 테스트
         # - "test" 같은 무의미 쿼리 대신, 첫 청크의 실제 토큰으로 저장 검증
@@ -192,20 +206,25 @@ def embed_from_html(
         doc_count = len(splits)
 
         logger.info("=" * 60)
-        logger.info("✅ 임베딩 완료 및 저장 완료!")
-        logger.info(f"📦 VectorDB 위치: {persist_dir}")
-        logger.info(f"📊 컬렉션 이름: {collection_name}")
-        logger.info(f"📈 저장된 청크 수: {doc_count}")
-        logger.info(f"📄 원본 문서 수: {len(documents)}")
+        logger.info("임베딩 완료 및 저장 완료!")
+        logger.info(f"VectorDB 위치: {persist_dir}")
+        logger.info(f"컬렉션 이름: {collection_name}")
+        logger.info(f"저장된 청크 수: {doc_count}")
+        logger.info(f"원본 문서 수: {len(documents)}")
+
         if doc_count:
-            logger.info(f"📏 평균 청크 크기: {total_chars // doc_count:,}자")
+            logger.info(f"평균 청크 크기: {total_chars // doc_count:,}자")
 
         if test_results:
-            logger.info(f"🧩 샘플 메타데이터:")
+            logger.info(f"샘플 메타데이터:")
             logger.info(f"   • source: {test_results[0].metadata.get('source')}")
-            logger.info(f"   • chunk_index: {test_results[0].metadata.get('chunk_index')}")
-            logger.info(f"   • total_chars: {test_results[0].metadata.get('total_chars')}")
-            logger.info(f"🔍 검색 테스트 성공 (쿼리: '{first_words}')")
+            logger.info(
+                f"   • chunk_index: {test_results[0].metadata.get('chunk_index')}"
+            )
+            logger.info(
+                f"   • total_chars: {test_results[0].metadata.get('total_chars')}"
+            )
+            logger.info(f"검색 테스트 성공 (쿼리: '{first_words}')")
         logger.info("=" * 60)
 
     except Exception as e:
@@ -218,10 +237,16 @@ def main():
     )
     parser.add_argument("--domain", required=True, help="도메인 이름 (예: d002)")
     parser.add_argument(
-        "--chunk-size", type=int, default=1000, help="청크 크기 (기본값: 1000)"
+        "--chunk-size",
+        type=int,
+        default=DEFAULT_CHUNK_SIZE,
+        help=f"청크 크기 (기본값: {DEFAULT_CHUNK_SIZE})",
     )
     parser.add_argument(
-        "--chunk-overlap", type=int, default=100, help="청크 오버랩 (기본값: 100)"
+        "--chunk-overlap",
+        type=int,
+        default=DEFAULT_CHUNK_OVERLAP,
+        help=f"청크 오버랩 (기본값: {DEFAULT_CHUNK_OVERLAP})",
     )
     args = parser.parse_args()
 
@@ -245,3 +270,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# 실행
+# 기본 설정으로 실행
+# python src/ingestion/d002/embed_store.py --domain d002
+
+# 커스텀 청크 크기로 실행
+# python src/ingestion/d002/embed_store.py --domain d002 --chunk-size 1500 --chunk-overlap 150

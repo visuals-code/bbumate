@@ -22,6 +22,9 @@ beautifulsoup4>=4.12,<5
 # CLI progress bar
 tqdm>=4.66,<5
 
+# Web Search
+tavily-python>=0.3.0
+
 # PDF processing (for PDFMinerPDFasHTMLLoader)
 pdfminer.six>=20221105
 
