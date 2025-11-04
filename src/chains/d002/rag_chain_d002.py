@@ -56,15 +56,6 @@ def load_document_links(domain: str = "d002") -> Dict[str, str]:
     return {}
 
 
-def get_document_url(source: str, domain: str = "d002") -> str:
-    """문서 출처의 URL 반환.
-
-    매핑이 있으면 URL 반환, 없으면 파일명 반환.
-    """
-    links = load_document_links(domain)
-    return links.get(source, source)
-
-
 def load_vector_db(domain: str = "d002") -> Chroma:
     """도메인별 Chroma VectorDB 로드 (Upstage 임베딩 일관화)."""
     persist_dir = f"data/{domain}/vector_store"
@@ -95,18 +86,38 @@ def load_llm() -> ChatUpstage:
 
 def extract_region_from_question(question: str) -> Optional[str]:
     """질문에서 지역 정보 추출.
-    
+
     지역 키워드:
     - 서울, 부산, 대구, 인천, 광주, 대전, 울산, 세종
     - 경기, 강원, 충북, 충남, 전북, 전남, 경북, 경남, 제주
     - 수도권, 지방, 수도권외
     """
     region_keywords = [
-        "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
-        "경기", "강원", "충북", "충남", "전북", "전남", "경북", "경남", "제주",
-        "수도권", "지방", "수도권외", "경기도", "인천광역시", "서울특별시"
+        "서울",
+        "부산",
+        "대구",
+        "인천",
+        "광주",
+        "대전",
+        "울산",
+        "세종",
+        "경기",
+        "강원",
+        "충북",
+        "충남",
+        "전북",
+        "전남",
+        "경북",
+        "경남",
+        "제주",
+        "수도권",
+        "지방",
+        "수도권외",
+        "경기도",
+        "인천광역시",
+        "서울특별시",
     ]
-    
+
     for keyword in region_keywords:
         if keyword in question:
             # 간단한 정리 (예: "경기도" -> "경기")
@@ -117,24 +128,31 @@ def extract_region_from_question(question: str) -> Optional[str]:
             elif keyword == "서울특별시":
                 return "서울"
             return keyword
-    
+
     return None
 
 
 def extract_housing_type_from_question(question: str) -> Optional[str]:
     """질문에서 주거형태 정보 추출.
-    
+
     주거형태 키워드:
     - 전세, 월세, 반전세, 자가, 매매, 구매, 분양, 청약
     """
     housing_keywords = [
-        "전세", "월세", "반전세", "자가", "매매", "구매", "분양", "청약"
+        "전세",
+        "월세",
+        "반전세",
+        "자가",
+        "매매",
+        "구매",
+        "분양",
+        "청약",
     ]
-    
+
     for keyword in housing_keywords:
         if keyword in question:
             return keyword
-    
+
     return None
 
 
@@ -144,20 +162,22 @@ def apply_region_housing_priority(
     preset_housing_type: Optional[str],
 ) -> tuple[Optional[str], Optional[str]]:
     """지역/주거형태 우선순위 적용.
-    
+
     우선순위: 질문 속 지역/주거형태 > 사전 선택 지역/주거형태
-    
+
     Returns:
         (최종 지역, 최종 주거형태)
     """
     # 질문에서 추출
     question_region = extract_region_from_question(question)
     question_housing_type = extract_housing_type_from_question(question)
-    
+
     # 우선순위 적용
     final_region = question_region if question_region else preset_region
-    final_housing_type = question_housing_type if question_housing_type else preset_housing_type
-    
+    final_housing_type = (
+        question_housing_type if question_housing_type else preset_housing_type
+    )
+
     return final_region, final_housing_type
 
 
@@ -232,6 +252,22 @@ def is_question_clear(question: str) -> bool:
 
     # 기본적으로는 모호함으로 판단
     return False
+
+
+def _build_user_context(
+    region: Optional[str], housing_type: Optional[str]
+) -> Optional[str]:
+    """지역/주거형태 컨텍스트 문자열 생성.
+
+    Returns:
+        컨텍스트 문자열 또는 None (정보가 없을 경우)
+    """
+    context_info = []
+    if region:
+        context_info.append(f"거주 지역: {region}")
+    if housing_type:
+        context_info.append(f"주거형태: {housing_type}")
+    return "\n".join(context_info) if context_info else None
 
 
 def _format_docs(docs: List[Any]) -> str:
@@ -413,22 +449,59 @@ def web_search(query: str) -> tuple[str, List[Dict[str, str]]]:
         )
 
 
+def _execute_web_search_path(
+    query: str,
+    llm,
+    final_region: Optional[str],
+    final_housing_type: Optional[str],
+    verbose: bool = False,
+) -> tuple[str, List[Dict[str, str]]]:
+    """웹 검색 경로 실행 (Re-write query → Web Search → Generate).
+
+    Returns:
+        (답변, sources 메타데이터)
+    """
+    if verbose:
+        print("[웹 검색 경로 실행]")
+
+    # Re-write query
+    rewritten_query = rewrite_query(query, llm)
+
+    if verbose:
+        print(f"[쿼리 재작성]: {rewritten_query}")
+
+    # Web Search
+    web_results, web_metadata = web_search(rewritten_query)
+
+    if verbose:
+        print("[웹 검색 완료]")
+
+    # Generate with Web Search results
+    answer = generate_with_web_context(
+        query, web_results, llm, final_region, final_housing_type
+    )
+
+    # 웹 검색 메타데이터를 sources 형태로 변환
+    sources = (
+        [{"title": item["title"], "url": item["url"]} for item in web_metadata]
+        if web_metadata
+        else ["웹 검색"]
+    )
+
+    return answer, sources
+
+
 def generate_with_web_context(
-    question: str, 
-    web_results: str, 
+    question: str,
+    web_results: str,
     llm_model,
     region: Optional[str] = None,
     housing_type: Optional[str] = None,
 ) -> str:
     """웹 검색 결과를 컨텍스트로 사용하여 답변 생성."""
     # 지역/주거형태 컨텍스트 정보 생성
-    context_info = []
-    if region:
-        context_info.append(f"거주 지역: {region}")
-    if housing_type:
-        context_info.append(f"주거형태: {housing_type}")
-    user_context = "\n".join(context_info) if context_info else None
-    
+    user_context = _build_user_context(region, housing_type)
+
     # 프롬프트 템플릿 구성 (컨텍스트 유무에 따라 다르게)
     if user_context:
         system_prompt = (
@@ -450,7 +523,7 @@ def generate_with_web_context(
             "- 금액(예: 100만원, 3억원)과 비율(예: 50%, 3.5%)은 **굵게** 처리\n"
             "- 문장 단위로 줄바꿈 (마침표, 느낌표, 물음표 뒤)"
         )
-    
+
     web_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", system_prompt),
@@ -466,7 +539,7 @@ def generate_with_web_context(
         }
         if user_context:
             invoke_params["user_context"] = user_context
-        
+
         answer = web_chain.invoke(invoke_params)
         return answer.strip()
     except Exception:
@@ -604,10 +677,12 @@ def run_rag(
     final_region, final_housing_type = apply_region_housing_priority(
         query, region, housing_type
     )
-    
+
     if verbose:
         if final_region or final_housing_type:
-            print(f"[컨텍스트] 지역: {final_region or '미지정'}, 주거형태: {final_housing_type or '미지정'}")
+            print(
+                f"[컨텍스트] 지역: {final_region or '미지정'}, 주거형태: {final_housing_type or '미지정'}"
+            )
 
     # Question Validation: 도메인 관련성 + 명확성 동시 체크 (선택적 스킵)
     if use_validation:
@@ -664,13 +739,8 @@ def run_rag(
         context = _format_docs(graded_docs)
 
         # 지역/주거형태 컨텍스트 정보 생성
-        context_info = []
-        if final_region:
-            context_info.append(f"거주 지역: {final_region}")
-        if final_housing_type:
-            context_info.append(f"주거형태: {final_housing_type}")
-        context_str = "\n".join(context_info) if context_info else None
-        
+        context_str = _build_user_context(final_region, final_housing_type)
+
         # 기본 프롬프트 구성
         base_prompt = """당신은 신혼부부 지원정책 도메인 전문가입니다.
 
@@ -683,7 +753,7 @@ def run_rag(
 6. 답변은 마크다운 형식으로 작성하세요:
    - 금액(예: 100만원, 3억원)과 비율(예: 50%, 3.5%)은 **굵게** 처리
    - 문장 단위로 줄바꿈 (마침표, 느낌표, 물음표 뒤)"""
-        
+
         # 사용자 컨텍스트가 있으면 추가
         if context_str:
             user_context_section = f"""
@@ -702,9 +772,11 @@ def run_rag(
 예시:
 - 질문: "재테크 방법 알려줘" → 답변: "제공된 문서에는 재테크 방법에 대한 정보가 없습니다. 신혼부부 지원정책(대출, 세금 혜택 등) 관련 질문만 답변드릴 수 있습니다."
 - 질문: "전세자금대출 조건 알려줘" → 답변: 컨텍스트에 나와있는 조건을 정확히 답변 (금액/비율은 **굵게**, 문장 단위 줄바꿈)"""
-        
-        system_prompt = f"{base_prompt}{user_context_section}\n\n컨텍스트:\n{{context}}".strip()
-        
+
+        system_prompt = (
+            f"{base_prompt}{user_context_section}\n\n컨텍스트:\n{{context}}".strip()
+        )
+
         # RAG 체인 구성: Context + Question → Generate
         rag_prompt = ChatPromptTemplate.from_messages(
             [
@@ -731,27 +803,8 @@ def run_rag(
             if verbose:
                 print("[Generate 결과: 정보 없음 → Web Search 경로로 전환]")
 
-            # Re-write query
-            rewritten_query = rewrite_query(query, llm)
-
-            if verbose:
-                print(f"[쿼리 재작성]: {rewritten_query}")
-
-            # Web Search
-            web_results, web_metadata = web_search(rewritten_query)
-
-            if verbose:
-                print("[웹 검색 완료]")
-
-            # Generate with Web Search results
-            answer = generate_with_web_context(
-                query, web_results, llm, final_region, final_housing_type
-            )
-            # 웹 검색 메타데이터를 sources 형태로 변환
-            sources = (
-                [{"title": item["title"], "url": item["url"]} for item in web_metadata]
-                if web_metadata
-                else ["웹 검색"]
+            answer, sources = _execute_web_search_path(
+                query, llm, final_region, final_housing_type, verbose
             )
         else:
             # 답변 성공
@@ -765,25 +818,8 @@ def run_rag(
         if verbose:
             print("[Grade 결과: 관련 문서 없음]")
 
-        # Re-write query
-        rewritten_query = rewrite_query(query, llm)
-
-        if verbose:
-            print(f"[쿼리 재작성]: {rewritten_query}")
-
-        # Web Search
-        web_results, web_metadata = web_search(rewritten_query)
-
-        if verbose:
-            print("[웹 검색 완료]")
-
-        # Generate with Web Search results
-        answer = generate_with_web_context(query, web_results, llm)
-        # 웹 검색 메타데이터를 sources 형태로 변환
-        sources = (
-            [{"title": item["title"], "url": item["url"]} for item in web_metadata]
-            if web_metadata
-            else ["웹 검색"]
+        answer, sources = _execute_web_search_path(
+            query, llm, final_region, final_housing_type, verbose
         )
 
     # sources는 위에서 이미 설정됨 (웹 검색 경로 또는 문서 경로)
@@ -809,4 +845,4 @@ def run_rag(
 
 
 ## 실행 테스트
-# python -c "from src.chains.rag_chain_d002 import run_rag; res = run_rag('신혼부부 전세자금대출 조건 알려줘','d002'); print(res['answer']); print(res['sources']); print(str(res['duration_ms']) + ' ms')"
+# python -c "from src.chains.d002.rag_chain_d002 import run_rag; res = run_rag('신혼부부 전세자금대출 조건 알려줘','d002'); print(res['answer']); print(res['sources']); print(str(res['duration_ms']) + ' ms')"
