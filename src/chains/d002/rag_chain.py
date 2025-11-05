@@ -1,4 +1,5 @@
 """d002 도메인 RAG 체인 정의."""
+
 import time
 from typing import List, Dict, Any, Optional
 
@@ -11,8 +12,12 @@ from src.utils.d002.context_extraction import (
 )
 from src.retrieval.d002.grader import grade_docs
 from src.generation.d002.validation import is_question_clear, validate_question
-from src.generation.d002.generator import generate_with_docs_context, generate_with_web_context
+from src.generation.d002.generator import (
+    generate_with_docs_context,
+    generate_with_web_context,
+)
 from src.generation.d002.web_search import execute_web_search_path
+from src.retrieval.d002.query_rewriter import QueryRewriter
 
 
 def _format_docs(docs: List[Any]) -> str:
@@ -129,6 +134,7 @@ def run_rag(
 
     # Grade 결과로 바로 결정
     use_web_search = False
+    rewritten_query = None  # 추가: rewrite 쿼리
     if graded_docs:
         # Grade Yes: 관련 문서가 있음 → RAG 체인으로 Generate
         context = _format_docs(graded_docs)
@@ -153,7 +159,7 @@ def run_rag(
                 print("[Generate 결과: 정보 없음 → Web Search 경로로 전환]")
 
             answer, sources = execute_web_search_path(
-                query, llm, final_region, final_housing_type, verbose
+                rewritten_query, query, llm, final_region, final_housing_type, verbose
             )
         else:
             # 답변 성공
@@ -191,4 +197,3 @@ def run_rag(
         "clarification_needed": False,
         "web_search_used": use_web_search,
     }
-

@@ -18,11 +18,11 @@ sys.path.insert(0, "/Users/a/KDT_BE13_Toy_Project4/src/ingestion/d004")
 sys.path.insert(0, "/Users/a/KDT_BE13_Toy_Project4/src/retrieval/d004")
 sys.path.insert(0, "/Users/a/KDT_BE13_Toy_Project4/src/test/d004")
 
-from query_router import QueryRouter
+from src.retrieval.d004.query_router import QueryRouter
 from retrieval import load_retriever, format_docs
-from grader import DocumentGrader
-from query_rewriter import QueryRewriter
-from web_search_fallback import WebSearchFallback
+from src.retrieval.d004.grader import DocumentGrader
+from src.retrieval.d004.query_rewriter import QueryRewriter
+from src.retrieval.d004.web_search_fallback import WebSearchFallback
 
 
 class AdvancedRAGChain:
@@ -47,10 +47,24 @@ class AdvancedRAGChain:
         self.rewriter = QueryRewriter(api_key=self.api_key, model=self.model)
         self.web_search = WebSearchFallback(api_key=self.api_key, model=self.model)
 
+        print(f"[DEBUG] db_path: {self.db_path}")
+        print(f"[DEBUG] collection_name: {self.collection_name}")
+
         # Retriever 초기화
         self.retriever = load_retriever(
             db_path=self.db_path, collection_name=self.collection_name, k=3
         )
+
+        try:
+            count = self.retriever.vectorstore._collection.count()
+            print(f"[DEBUG] 벡터스토어 문서 개수: {count}")
+
+            # 메타데이터 샘플 확인
+            sample_docs = self.retriever.vectorstore._collection.get(limit=3)
+            if sample_docs and sample_docs["metadatas"]:
+                print(f"[DEBUG] 샘플 메타데이터: {sample_docs['metadatas'][0]}")
+        except Exception as e:
+            print(f"[DEBUG] 벡터스토어 확인 실패: {e}")
 
         # LLM 초기화
         self.llm = ChatUpstage(api_key=self.api_key, model=self.model)
@@ -71,6 +85,38 @@ class AdvancedRAGChain:
 
         self.answer_chain = self.answer_prompt | self.llm | StrOutputParser()
 
+    def _build_metadata_filter(self, region: str = None, housing_type: str = None):
+        """메타데이터 필터 생성 (한 번만 실행)"""
+        if region and housing_type:
+            return {
+                "$and": [
+                    {"region": {"$eq": region}},
+                    {"housing_type": {"$eq": housing_type}},
+                ]
+            }
+        elif region:
+            return {"region": {"$eq": region}}
+        elif housing_type:
+            return {"housing_type": {"$eq": housing_type}}
+        return None
+
+    def _retrieve_documents(self, question: str, metadata_filter: dict = None):
+        """문서 검색 (필터 적용)"""
+        try:
+            if metadata_filter:
+                print(f"  → 필터 적용: {metadata_filter}")
+                documents = self.retriever.vectorstore.similarity_search(
+                    question, k=3, filter=metadata_filter
+                )
+            else:
+                print(f"  → 필터 없이 검색")
+                documents = self.retriever.vectorstore.similarity_search(question, k=3)
+                return documents
+
+        except Exception as e:
+            print(f"  → 검색 오류: {e}")
+            return []
+
     def _extract_sources(self, documents: List[Document]) -> List[Dict]:
         sources = []
         seen_sources = set()
@@ -79,18 +125,15 @@ class AdvancedRAGChain:
             metadata = doc.metadata
             source_file = metadata.get("source_file", metadata.get("source", ""))
 
-            # 중복 체크
             source_key = source_file
             if source_key in seen_sources:
                 continue
             seen_sources.add(source_key)
 
-            # title 추출
             title = metadata.get("heading", "")
             if not title:
                 title = Path(source_file).stem.replace("_", " ").title()
 
-            # url 추출
             url = metadata.get("url", None)
 
             sources.append({"title": title, "url": url, "source": source_file})
@@ -106,26 +149,15 @@ class AdvancedRAGChain:
         return sources
 
     def _format_markdown(self, text: str) -> str:
-        # 금액 패턴: 숫자
-        # 비율 패턴: 숫자 + %
         pattern = r"(\d+(?:,\d+)*(?:\.\d+)?(?:만원|억원|천원|원|%))"
         text = re.sub(pattern, r"**\1**", text)
-
-        # 문장 단위 줄바꿈
         text = re.sub(r"\.\s+", ".\\n\\n", text)
-
         return text.strip()
 
     def _format_html(self, text: str) -> str:
-
-        # 금액/비율 패턴
         pattern = r"(\d+(?:,\d+)*(?:\.\d+)?(?:만원|억원|천원|원|%))"
         text = re.sub(pattern, r"<strong>\1</strong>", text)
-
-        # 문장 단위 줄바꿈
         text = re.sub(r"\.\s+", ".<br/><br/>", text)
-
-        # div로 감싸기
         return f"<div>{text}</div>"
 
     def invoke(
@@ -141,7 +173,7 @@ class AdvancedRAGChain:
         print(f"{'='*60}")
 
         # Step 1: Query Router - 질문 명확성 판단
-        print("\n Query Router: 질문 분석 중...")
+        print("\n✓ Query Router: 질문 분석 중...")
         routing_result = self.router.route(question)
 
         if routing_result["status"] == "WEB_SEARCH":
@@ -164,58 +196,36 @@ class AdvancedRAGChain:
                 "rewrite_count": 0,
             }
 
-        print(f"  → 질문이 명확합니다. 검색을 진행합니다.")
+        print(f"  → 질문이 명확합니다. 벡터DB 검색을 진행합니다.")
 
-        # Step 2: Retrieval with potential rewriting
+        # Step 2: 메타데이터 필터 생성 (한 번만)
+        initial_filter = self._build_metadata_filter(region, housing_type)
+
+        # Step 3: Retrieval with potential rewriting
         current_question = question
         rewrite_count = 0
         relevant_docs = []
         documents = []
 
-        # metadata 필터 구성 (Chroma 형식)
-        metadata_filter = None
-        if region and housing_type:
-            # 두 조건 모두 있으면 $and 사용
-            metadata_filter = {
-                "$and": [
-                    {"region": {"$eq": region}},
-                    {"housing_type": {"$eq": housing_type}},
-                ]
-            }
-        elif region:
-            # region만 있으면
-            metadata_filter = {"region": {"$eq": region}}
-        elif housing_type:
-            # housing_type만 있으면
-            metadata_filter = {"housing_type": {"$eq": housing_type}}
-
         for attempt in range(self.max_rewrite_attempts + 1):
-            if metadata_filter:
-                print(f"  → 필터 적용: {metadata_filter}")
-                # vectorstore에 직접 접근
-                documents = self.retriever.vectorstore.similarity_search(
-                    current_question, k=3, filter=metadata_filter
-                )
-            else:
-                documents = self.retriever.invoke(current_question)
+            print(f"\n✓ Retrieval (시도 {attempt + 1}/{self.max_rewrite_attempts + 1})")
 
-            # 문서 검색 (필터 적용)
+            metadata_filter = initial_filter
+            if attempt > 0 and initial_filter:
+                # 2차 시도 이상일 경우, 그리고 최초 필터가 존재했을 경우
+                metadata_filter = None
+                print("  → 필터 해제: 광범위 검색을 위해 지역/주택 필터를 제거합니다.")
+
+            # 문서 검색 (중복 제거)
             start_time = time.time()
-            if metadata_filter:
-                # Chroma의 where 필터 사용
-                documents = self.retriever.vectorstore.similarity_search(
-                    current_question, k=3, filter=metadata_filter
-                )
-            else:
-                documents = self.retriever.invoke(current_question)
-
+            documents = self._retrieve_documents(current_question, metadata_filter)
             search_time = time.time() - start_time
-            print(f"  → {len(documents)}개 문서 검색됨 (소요시간: {search_time:.2f}초)")
+            print(f"  → 검색 시간: {search_time:.2f}초")
 
             if not documents:
                 print("  → 검색 결과 없음")
                 if attempt < self.max_rewrite_attempts:
-                    print(f"\n Query Rewriter: 질문 재작성 중...")
+                    print(f"\n✓ Query Rewriter: 질문 재작성 중...")
                     current_question = self.rewriter.rewrite_with_history(
                         question, attempt
                     )
@@ -225,8 +235,8 @@ class AdvancedRAGChain:
                 else:
                     break
 
-            # Step 3: Grader - 문서 관련성 평가
-            print(f"\n Grader: 문서 관련성 평가 중...")
+            # Step 4: Grader - 문서 관련성 평가
+            print(f"\n✓ Grader: 문서 관련성 평가 중...")
             grading_result = self.grader.grade_documents(current_question, documents)
 
             print(
@@ -235,9 +245,10 @@ class AdvancedRAGChain:
 
             relevant_docs = grading_result["relevant_documents"]
 
+            # 첫 시도에서 관련 문서가 없으면 웹 검색
             if not relevant_docs and attempt == 0:
                 print(f"  → 첫 검색에서 관련 문서 없음. 웹 검색으로 전환합니다.")
-                print(f"\n Web Search: 웹 검색 수행 중...")
+                print(f"\n✓ Web Search: 웹 검색 수행 중...")
                 web_result = self.web_search.search_and_answer(question)
                 answer_text = web_result["answer"]
                 web_sources = self._extract_web_sources(web_result)
@@ -262,7 +273,7 @@ class AdvancedRAGChain:
 
             # 관련 문서가 없고 재시도 가능하면 질문 재작성
             if attempt < self.max_rewrite_attempts:
-                print(f"\n Query Rewriter: 질문 재작성 중...")
+                print(f"\n✓ Query Rewriter: 질문 재작성 중...")
                 current_question = self.rewriter.rewrite_with_history(question, attempt)
                 rewrite_count += 1
                 print(f"  → 재작성된 질문: {current_question}")
@@ -271,11 +282,10 @@ class AdvancedRAGChain:
 
         # Step 5: Web Search Fallback (관련 문서가 없을 경우)
         if not relevant_docs:
-            print(f"\n Web Search: 웹 검색 폴백 수행 중...")
+            print(f"\n✓ Web Search: 웹 검색 폴백 수행 중...")
             web_result = self.web_search.search_and_answer(question)
 
             answer_text = web_result["answer"]
-
             web_sources = self._extract_web_sources(web_result)
 
             return {
@@ -293,7 +303,7 @@ class AdvancedRAGChain:
             }
 
         # Step 6: LLM Answer Generation
-        print(f"\n LLM Answer Generation: 답변 생성 중...")
+        print(f"\n✓ LLM Answer Generation: 답변 생성 중...")
         context = format_docs(relevant_docs)
 
         start_time = time.time()

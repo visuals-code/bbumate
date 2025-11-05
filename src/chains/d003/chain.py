@@ -13,6 +13,11 @@ from src.retrieval.d003.retriever import get_retriever
 from src.generation.d003.prompting import build_chat_prompt, format_docs_for_context
 
 
+from src.retrieval.d003.grader import DocumentGrader
+from src.retrieval.d003.query_rewriter import QueryRewriter
+from src.retrieval.d003.web_search_fallback import WebSearchFallback
+
+
 def build_llm() -> ChatUpstage:
     """
     Initialize Upstage Chat model from environment variables.
@@ -56,6 +61,28 @@ def answer_question(question: str, k: int = 3) -> Tuple[str, List[Document]]:
     retriever = get_retriever(k=k)
     docs: List[Document] = retriever.invoke(question)
 
+    # grader
+    grader = DocumentGrader()
+    grading_result = grader.grade_documents(question, docs)
+
+    # rewrite
+    retry_count = 0
+    while grading_result["needs_web_search"] and retry_count < max_retries:
+        rewriter = QueryRewriter()
+        rewritten_query = rewriter.rewrite_with_history(question, retry_count)
+        docs = retriever.invoke(rewritten_query)
+        grading_result = grader.grade_documents(rewritten_query, docs)
+        retry_count += 1
+
+    # web search
+    if grading_result["needs_web_search"]:
+        web_search = WebSearchFallback()
+        return web_search.search_and_answer(question), []
+
+    # 관련 문서로 답변 생성
+    relevant_docs = grading_result["relevant_documents"]
+
+    # 기존 코드
     prompt = build_chat_prompt()
     llm = build_llm()
 

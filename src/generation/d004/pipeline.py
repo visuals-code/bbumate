@@ -33,6 +33,7 @@ def main():
     VectorStoreManager.save_documents(
         documents=documents, collection_name=COLLECTION_NAME, db_path=CHROMA_DB_DIR
     )
+    print(f"[DEBUG] VectorStoreManager.save_documents 호출 후")
 
 
 if __name__ == "__main__":
