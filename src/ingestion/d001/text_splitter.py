@@ -21,5 +21,5 @@ def split_documents(documents: List[Document]) -> List[Document]:
     )
 
     chunks = text_splitter.split_documents(documents)
-    print(f"✅ 총 {len(chunks)}개의 청크로 분할되었습니다.")
+    print(f"총 {len(chunks)}개의 청크로 분할되었습니다.")
     return chunks

@@ -1,5 +1,6 @@
 """PDF 문서를 로드하고 Upstage 임베딩을 사용하여 Chroma DB에 저장하는 데이터 수집 파이프라인."""
 
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -18,6 +19,9 @@ def main_pipeline() -> None:
     Returns:
         None. 파이프라인 실행 결과를 콘솔에 출력합니다.
     """
+    # 전체 파이프라인 시작 시간 측정
+    pipeline_start_time = time.time()
+
     # 1. `.env` 파일 로드
     load_dotenv()
     print("`.env` 파일의 환경 변수를 로드했습니다.")
@@ -41,7 +45,14 @@ def main_pipeline() -> None:
     vector_db = store_in_chroma(chunks)
 
     if vector_db:
-        print("\n--- 파이프라인 실행 완료 ---")
+        # 전체 파이프라인 종료 시간 측정
+        pipeline_end_time = time.time()
+        total_elapsed_time = pipeline_end_time - pipeline_start_time
+
+        print("\n" + "="*60)
+        print("--- 파이프라인 실행 완료 ---")
+        print(f"[전체 파이프라인] 총 소요 시간: {total_elapsed_time:.2f}초 ({total_elapsed_time/60:.2f}분)")
+        print("="*60)
 
         # 6. 저장 확인 함수 호출
         verify_storage()
