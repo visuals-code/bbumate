@@ -159,11 +159,25 @@ def format_sources(sources, domain: str = "d002") -> List[SourceItem]:
     - URL이 있으면 url 필드에, 없으면 null
     - title은 파일명 또는 URL에서 추출
     - source는 원본 파일명 또는 "웹 검색"
+    - 통합 DB를 사용하므로 여러 도메인(d001-d005)의 문서를 처리
+    - 통합 url_map.json 파일을 사용하여 URL 매핑
     """
-    from src.utils.d002.loaders import load_document_links
+    import os
+    import re
+    import json
+    from pathlib import Path
     
     formatted_sources = []
-    links = load_document_links(domain)
+    
+    # 통합 url_map.json 로드
+    url_map = {}
+    url_map_file = Path("data/url_map.json")
+    if url_map_file.exists():
+        try:
+            with open(url_map_file, "r", encoding="utf-8") as f:
+                url_map = json.load(f)
+        except Exception as e:
+            logger.warning(f"url_map.json 로드 실패: {e}")
     
     for source_item in sources:
         # 딕셔너리 형태 (웹 검색 결과)
@@ -186,16 +200,51 @@ def format_sources(sources, domain: str = "d002") -> List[SourceItem]:
                     )
                 )
             else:
-                # 문서인 경우
-                url = links.get(source_item) if source_item in links else None
-                # 파일명에서 확장자 제거하고 title로 사용
-                title = source_item.replace(".html", "").replace(".pdf", "").replace("_", " ")
+                # 문서인 경우 - 경로에서 도메인과 파일명 추출
+                # 예: "data/d005/subscription_term.pdf" 또는 "data\d005\subscription_term.pdf"
+                source_path = source_item.replace("\\", "/")  # Windows 경로 정규화
+                
+                # 도메인 추출 (d001~d005)
+                domain_match = re.search(r'data/(d\d{3})/', source_path)
+                if domain_match:
+                    detected_domain = domain_match.group(1)
+                    # 파일명 추출
+                    filename = os.path.basename(source_path)
+                else:
+                    # 경로가 없으면 전체를 파일명으로 간주
+                    detected_domain = domain
+                    filename = os.path.basename(source_path) if "/" in source_path or "\\" in source_path else source_item
+                
+                # url_map.json에서 URL 찾기
+                # url_map.json에는 두 가지 형식이 섞여 있음:
+                # 1. 확장자 포함: "tax_credit.html", "department_store_hyundai.pdf"
+                # 2. 확장자 없음: "subscription_hope_town", "busan_hope_plus_housing_project"
+                url = None
+                filename_no_ext = filename.replace(".html", "").replace(".pdf", "")
+                
+                # 1. 확장자 포함한 파일명으로 찾기 (예: "tax_credit.html", "department_store_hyundai.pdf")
+                url = url_map.get(filename)
+                
+                # 2. 확장자 제거한 파일명으로 찾기 (예: "subscription_term.pdf" -> "subscription_term")
+                if not url:
+                    url = url_map.get(filename_no_ext)
+                
+                # 3. 빈 문자열을 None으로 변환 (url_map.json에 빈 문자열로 저장된 경우)
+                if url == "":
+                    url = None
+                
+                # title 생성: 파일명에서 확장자 제거하고 공백으로 변환
+                title = filename_no_ext.replace("_", " ").replace("-", " ")
+                title = re.sub(r'\s+', ' ', title).strip()  # 연속된 공백 제거
+                
+                # source 경로 정규화 (항상 data/{domain}/{filename} 형식)
+                normalized_source = f"data/{detected_domain}/{filename}"
                 
                 formatted_sources.append(
                     SourceItem(
-                        title=title,
+                        title=title if title else filename,
                         url=url,
-                        source=f"data/{domain}/{source_item}" if not source_item.startswith("data/") else source_item
+                        source=normalized_source
                     )
                 )
     
