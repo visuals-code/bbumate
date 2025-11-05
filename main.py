@@ -45,10 +45,20 @@ from src.api.d002.api_d002 import (
 )
 
 
+# 헬스체크 엔드포인트
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "service": "신혼부부 지원정책 RAG 서버", "version": "0.1.0"}
+
+
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=500, description="사용자 질문")
-    region: Optional[str] = Field(None, description="사전 선택 지역 (예: 인천, 서울, 경기)")
-    housing_type: Optional[str] = Field(None, description="사전 선택 주거형태 (예: 전세, 월세, 자가, 매매)")
+    region: Optional[str] = Field(
+        None, description="사전 선택 지역 (예: 인천, 서울, 경기)"
+    )
+    housing_type: Optional[str] = Field(
+        None, description="사전 선택 주거형태 (예: 전세, 월세, 자가, 매매)"
+    )
 
     @field_validator("question")
     @classmethod
@@ -100,35 +110,35 @@ class IngestResponse(BaseModel):
 @app.post("/query", response_model=QueryResponse)
 def query(request: QueryRequest):
     """신혼부부 정책 관련 질문에 답변합니다.
-    
+
     - **question**: 질문 내용 (1~500자)
     - **region**: 사전 선택 지역 (예: 인천, 서울, 경기)
     - **housing_type**: 사전 선택 주거형태 (예: 전세, 월세, 자가, 매매)
     """
     import time
     import logging
-    
+
     logger = logging.getLogger(__name__)
     start_time = time.perf_counter()
-    
+
     # 통합 벡터 DB를 사용하는 RAG 파이프라인 실행 (d002 파이프라인 사용)
     res = answer_question(
         question=request.question,
-        k=3, 
+        k=3,
         use_grade=True,  # Grade 활성화 (관련 문서만 필터링)
         use_validation=True,  # validation 활성화
         region=request.region,
         housing_type=request.housing_type,
         verbose=True,  # 디버깅을 위해 verbose 활성화
     )
-    
+
     answer = res.get("answer", "답변 생성 실패")
     sources_list = res.get("sources", [])
     clarification_needed = res.get("clarification_needed", False)
     duration_ms = res.get("duration_ms", 0)
     num_docs = res.get("num_docs", 0)
     web_search_used = res.get("web_search_used", False)
-    
+
     # 로그로 메타데이터 출력
     elapsed_time = time.perf_counter() - start_time
     logger.info(
@@ -138,17 +148,17 @@ def query(request: QueryRequest):
         f"WebSearch: {web_search_used}, "
         f"ClarificationNeeded: {clarification_needed}"
     )
-    
+
     # LLM이 마크다운 형식으로 생성하므로 변환
     answer_text = markdown_to_text(answer)  # 순수 텍스트
     answer_md = format_to_markdown(answer)  # 마크다운 (정리)
     answer_html = markdown_to_html(answer)  # HTML 변환
-    
+
     # sources 객체 배열로 변환
     # format_sources는 내부에서 모든 도메인(d001-d005)의 링크를 자동으로 처리
     # domain 파라미터는 기본값으로만 사용되며, 실제로는 경로에서 도메인을 자동 감지
     sources = format_sources(sources_list)
-    
+
     return {
         "answer": answer_text,
         "answer_md": answer_md,
@@ -161,7 +171,7 @@ def query(request: QueryRequest):
 @app.post("/ingest", response_model=IngestResponse)
 def run_ingest(request: IngestRequest):
     """도메인별 문서 ingestion 실행 (관리자용).
-    
+
     주의: ingestion은 시간이 오래 걸릴 수 있으며, 벡터 DB를 재생성합니다.
     """
     try:
