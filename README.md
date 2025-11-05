@@ -4,19 +4,10 @@
 
 ## 쀼메이트 👰🏻🤵🏻 - 신혼부부 챗봇 상담 서비스
 
-> 📚 **상세 문서**: 전체 시스템 아키텍처 및 데이터 흐름은 [ARCHITECTURE.md](ARCHITECTURE.md)를 참고하세요.
-> 📖 **설치 및 사용법**: [D001_GUIDE.md](d001docs/D001_GUIDE.md)에서 자세한 가이드를 확인할 수 있습니다.
-
 ### 1. 서비스 개요
 
 - **목적**: "쀼메이트"는 결혼 후 주거·대출·복지·기업 혜택 등 각 기관에 흩어진 정보를 RAG 기반으로 통합하여, 사용자의 상황에 맞는 정책을 추천하는 AI 상담 플랫폼입니다.
-<<<<<<< HEAD
-- **사용 흐름**: 사용자가 지역, 거주 유형 등 조건을 입력 → 질문 → 관련 정책/대출/지원금 정보를 검색 → 요약·비교 → **출처가 포함된 답변** 제공합니다.
-- **🆕 새로운 기능: 질문 명확화 (Clarification)** - 모호한 질문을 자동 감지하고 명확화 질문 제시 → 더 정확한 답변 제공 ([자세히 보기](d001docs/D001_GUIDE.md#3-질문-명확화-기능이-포함된-질의))
-- **거주 유형 중복 선택**: 전세, 월세, 자가, 무주택 중 여러 개 선택 가능
-=======
 - **사용 흐름**: 사용자가 소득, 지역, 자녀 수 등 조건을 입력 → 관련 정책/대출/지원금 정보를 검색 → 요약·비교 → **출처가 포함된 답변** 제공합니다.
->>>>>>> main
 
 ### 2. 기획 의도
 
@@ -28,36 +19,12 @@
 - 출처 기반 근거 제시
 
 ### 3. 아키텍처/설계 (LangChain + Chroma + Upstage)
-<<<<<<< HEAD
-- **FastAPI**: 경량 REST API 서버
-  - `/` 헬스체크
-  - `/query` 기본 RAG 질의
-  - `/adaptive/query` 적응형 RAG (문서 품질 평가 + 웹 검색)
-  - **🆕 `/adaptive/query-with-clarification`** 명확화 기능 포함 질의
-  - **🆕 `/adaptive/answer-with-clarification`** 명확화 응답 처리
-=======
 
 - **FastAPI**: 경량 REST API 서버 (`/` 헬스체크, `/query` 질의 엔드포인트)
->>>>>>> main
 - **LangChain 0.3 (Runnables API)**: 체인 구성
   - Retriever(Chroma) → 컨텍스트 포맷 → Prompt → Upstage Chat → 문자열 파싱
 - **벡터DB: Chroma**: 로컬 퍼시스턴스(`CHROMA_DB_DIR`) 사용
 - **모델**: Upstage Embedding/Chat 모델을 `.env`로 관리
-<<<<<<< HEAD
-- **처리 흐름** ([상세 아키텍처 문서](ARCHITECTURE.md))
-    1. **사용자 입력** (질문 + 지역 + 거주 유형)
-       - 거주 유형: 전세, 월세, 자가, 무주택 (중복 선택 가능)
-    2. **🆕 Clarification Check** (질문 명확성 판단 - 규칙 기반 + LLM 기반)
-    3. **🆕 Re-ask / Clarification** (모호한 경우 명확화 질문 제시)
-    4. **Retrieve** (VectorDB에서 관련 문서 검색, k개)
-    5. **Grade** (LLM으로 문서 관련성 평가 + 점수 부여)
-    6. **🆕 Rerank** (관련성 점수 기준으로 문서 재정렬, top_k개 선택)
-    7. **Decision** (문서 품질 판단)
-       - 충분함 → DB 문서로 답변 생성
-       - 부족함 → Re-write Query → Web Search → 답변 생성
-    8. **LLM Answer Generation** (Upstage Chat 모델로 답변 생성)
-    9. **Answer** (출력)
-=======
 - **처리 흐름**
   1. Question (사용자 질문 입력)
   2. Clarification Check (질문 명확성 판단)
@@ -68,7 +35,6 @@
   7. Web Search (외부 데이터 검색)
   8. LLM Answer Generation (Upstage Chat 모델로 답변 생성)
   9. Answer (출력)
->>>>>>> main
 
 ### 4. RAG 파이프라인
 
@@ -87,9 +53,6 @@ KDT_BE13_TOY_PROJECT4/
 │   ├── retrieval/        # 쿼리 기반 문서 검색
 │   ├── generation/       # LLM 응답 생성
 │   ├── chains/           # LangChain / LangGraph 체인 정의
-│   │   ├── rag_chain.py
-│   │   ├── adaptive_rag_chain.py
-│   │   └── clarification_chain.py  🆕 질문 명확화 체인
 │   ├── utils/            # 공통 유틸, 로깅, 캐싱
 │   └── api/              # FastAPI 엔드포인트
 ├── .env.example
