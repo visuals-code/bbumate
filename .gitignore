@@ -19,8 +19,10 @@ venv/
 
 # ChromaDB (vector store persistence)
 chroma_storage/
+chroma_storage/**
 *.sqlite3
-data/*/vector_store/**/*.bin
+data/*/vector_store/
+data/*/vector_store/**
 
 # OS / Editor
 .DS_Store

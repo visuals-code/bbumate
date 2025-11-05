@@ -1,4 +1,5 @@
 """d002 도메인 문서 평가(Grade) 모듈."""
+
 from typing import List, Any, Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -97,4 +98,3 @@ def grade_docs(question: str, docs: List[Any], llm_model) -> List[Any]:
                 filtered.append(doc)
 
     return filtered
-

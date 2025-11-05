@@ -120,10 +120,20 @@ def run_rag(
 
     # Retrieve: 문서 검색
     initial_docs = retriever.invoke(query)
+    
+    # 검색된 문서 내용 출력 (디버깅용)
+    if verbose and initial_docs:
+        print(f"[검색된 문서 (Grade 전)] {len(initial_docs)}개")
+        for i, doc in enumerate(initial_docs[:3], 1):  # 최대 3개만 출력
+            content_preview = (doc.page_content or "")[:200]
+            source = doc.metadata.get("source", "unknown")
+            print(f"  [{i}] {source}: {content_preview}...")
 
     # Grade: 관련성 높은 문서만 필터링
     if grade_enabled and initial_docs:
         graded_docs = grade_docs(query, initial_docs, llm)
+        if verbose:
+            print(f"[Grade 결과] {len(initial_docs)}개 → {len(graded_docs)}개")
     else:
         graded_docs = initial_docs
 
@@ -139,13 +149,17 @@ def run_rag(
         )
 
         # 답변에서 "정보가 없습니다" 패턴 감지 → Web Search 경로로 전환
-        no_info_keywords = [
-            "정보가 없습니다",
+        # 더 정확한 패턴만 감지 (너무 광범위한 "없습니다"는 제외)
+        no_info_patterns = [
+            "제공된 문서에는 해당 정보가 없습니다",
+            "제공된 문서에는",
             "해당 정보가 없습니다",
-            "없습니다",
+            "정보가 없습니다",
             "찾을 수 없습니다",
         ]
-        if any(keyword in answer for keyword in no_info_keywords):
+        # 패턴이 답변의 시작 부분에 나타나는 경우만 감지 (일부 내용만 언급하는 경우 제외)
+        answer_lower = answer.lower()
+        if any(pattern in answer_lower for pattern in no_info_patterns):
             # 문서로 답변 불가능 → Web Search 경로로 전환
             use_web_search = True
 
@@ -177,6 +191,13 @@ def run_rag(
     if verbose:
         print("[질문]", query)
         print(f"[검색 문서] {len(initial_docs)}개 → {len(graded_docs)}개 (Grade)")
+        if graded_docs and not use_web_search:
+            # 검색된 문서 내용 일부 출력 (디버깅용)
+            print(f"[검색된 문서 내용 샘플]")
+            for i, doc in enumerate(graded_docs[:2], 1):  # 최대 2개만 출력
+                content_preview = (doc.page_content or "")[:200]
+                source = doc.metadata.get("source", "unknown")
+                print(f"  [{i}] {source}: {content_preview}...")
         if use_web_search:
             print("[웹 검색 경로 사용]")
         print(f"[소요(ms)]", duration_ms)
