@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
-from src.chains.d002.rag_chain_d002 import run_rag
+from src.chains.d002.rag_chain import run_rag
 
 
 # 로깅 설정
@@ -40,6 +40,16 @@ class QueryRequest(BaseModel):
         if not v:
             raise ValueError("질문은 비어있을 수 없습니다")
         return v
+
+    @field_validator("region", "housing_type", mode="before")
+    @classmethod
+    def filter_empty_strings(cls, v: Optional[str]) -> Optional[str]:
+        """빈 문자열을 None으로 변환 (필터링)."""
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v.strip() if isinstance(v, str) else v
 
 
 # Source 모델
@@ -150,7 +160,7 @@ def format_sources(sources, domain: str = "d002") -> List[SourceItem]:
     - title은 파일명 또는 URL에서 추출
     - source는 원본 파일명 또는 "웹 검색"
     """
-    from src.chains.d002.rag_chain_d002 import load_document_links
+    from src.utils.d002.loaders import load_document_links
     
     formatted_sources = []
     links = load_document_links(domain)
