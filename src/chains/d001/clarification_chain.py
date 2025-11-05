@@ -18,7 +18,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_upstage import ChatUpstage
 
-from src.config import settings
+from src.utils.d001.config import settings
 from src.utils.d001.logger import get_logger
 
 logger = get_logger(__name__)

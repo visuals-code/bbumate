@@ -2,6 +2,7 @@
 
 검색된 문서가 사용자 질문과 얼마나 관련있는지 평가합니다.
 """
+
 import asyncio
 from typing import List, Literal, Tuple
 
@@ -10,7 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_upstage import ChatUpstage
 
-from src.config import settings
+from src.utils.d001.config import settings
 from src.utils.d001.logger import get_logger
 
 logger = get_logger(__name__)
@@ -22,9 +23,7 @@ class GradeScore(BaseModel):
     score: Literal["relevant", "irrelevant"] = Field(
         description="문서가 질문과 관련있으면 'relevant', 아니면 'irrelevant'"
     )
-    confidence: float = Field(
-        description="평가 확신도 (0.0 ~ 1.0)", ge=0.0, le=1.0
-    )
+    confidence: float = Field(description="평가 확신도 (0.0 ~ 1.0)", ge=0.0, le=1.0)
 
 
 class DocumentGrader:
@@ -80,12 +79,14 @@ class DocumentGrader:
 
 이 문서가 위 질문에 답변하는데 도움이 됩니까? relevant 또는 irrelevant로만 답하세요."""
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_template),
-        ])
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_template),
+            ]
+        )
 
         return prompt
-    
+
     async def agrade_document(self, question: str, document: Document) -> GradeScore:
         """단일 문서를 비동기적으로 평가합니다.
 
@@ -99,23 +100,33 @@ class DocumentGrader:
         try:
             # LLM 호출하여 실제 평가
             chain = self.grader_prompt | self.llm
-            response = await chain.ainvoke({
-                "question": question,
-                "document": document.page_content[:500]  # 토큰 절약을 위해 500자만
-            })
+            response = await chain.ainvoke(
+                {
+                    "question": question,
+                    "document": document.page_content[:500],  # 토큰 절약을 위해 500자만
+                }
+            )
 
             response_text = response.content.lower()
 
             # 응답 파싱
             if "relevant" in response_text and "irrelevant" not in response_text[:20]:
                 score = "relevant"
-                if "매우" in response_text or "확실" in response_text or "명확" in response_text:
+                if (
+                    "매우" in response_text
+                    or "확실" in response_text
+                    or "명확" in response_text
+                ):
                     confidence = 0.9
                 elif "보통" in response_text or "어느정도" in response_text:
                     confidence = 0.7
                 else:
                     confidence = 0.8
-            elif "irrelevant" in response_text or "관련없" in response_text or "관련 없" in response_text:
+            elif (
+                "irrelevant" in response_text
+                or "관련없" in response_text
+                or "관련 없" in response_text
+            ):
                 score = "irrelevant"
                 confidence = 0.8
             else:
@@ -124,24 +135,34 @@ class DocumentGrader:
                 question_lower = question.lower()
                 question_keywords = [w for w in question_lower.split() if len(w) > 1]
                 matches = sum(1 for kw in question_keywords if kw in content_lower)
-                match_ratio = matches / len(question_keywords) if question_keywords else 0
+                match_ratio = (
+                    matches / len(question_keywords) if question_keywords else 0
+                )
                 score = "relevant" if match_ratio >= 0.5 else "irrelevant"
                 confidence = 0.6 if score == "relevant" else 0.7
 
             logger.debug(
                 "Document grading: %s (confidence: %.2f) for question: %s...",
-                score, confidence, question[:30]
+                score,
+                confidence,
+                question[:30],
             )
             return GradeScore(score=score, confidence=confidence)
 
         except Exception as e:
-            logger.warning("Async document grading failed: %s, using conservative evaluation", e)
+            logger.warning(
+                "Async document grading failed: %s, using conservative evaluation", e
+            )
             content_lower = document.page_content.lower()
             question_lower = question.lower()
             question_keywords = [w for w in question_lower.split() if len(w) > 1]
             matches = sum(1 for kw in question_keywords if kw in content_lower)
             match_ratio = matches / len(question_keywords) if question_keywords else 0
-            return GradeScore(score="relevant", confidence=0.6) if match_ratio >= 0.6 else GradeScore(score="irrelevant", confidence=0.7)
+            return (
+                GradeScore(score="relevant", confidence=0.6)
+                if match_ratio >= 0.6
+                else GradeScore(score="irrelevant", confidence=0.7)
+            )
 
     async def agrade_documents(
         self, question: str, documents: List[Document]
@@ -177,7 +198,10 @@ class DocumentGrader:
         confidences = []
 
         for doc, grade in graded_docs:
-            if grade.score == "relevant" and grade.confidence >= self.relevance_threshold:
+            if (
+                grade.score == "relevant"
+                and grade.confidence >= self.relevance_threshold
+            ):
                 relevant_docs_with_scores.append((doc, grade.confidence))
                 confidences.append(grade.confidence)
 
@@ -185,7 +209,9 @@ class DocumentGrader:
 
         logger.info(
             "Filtered %d/%d relevant documents with scores (avg confidence: %.2f)",
-            len(relevant_docs_with_scores), len(documents), avg_confidence
+            len(relevant_docs_with_scores),
+            len(documents),
+            avg_confidence,
         )
 
         return relevant_docs_with_scores, avg_confidence
@@ -203,10 +229,12 @@ class DocumentGrader:
         try:
             # LLM 호출하여 실제 평가
             chain = self.grader_prompt | self.llm
-            response = chain.invoke({
-                "question": question,
-                "document": document.page_content[:500]  # 토큰 절약을 위해 500자만
-            })
+            response = chain.invoke(
+                {
+                    "question": question,
+                    "document": document.page_content[:500],  # 토큰 절약을 위해 500자만
+                }
+            )
 
             response_text = response.content.lower()
 
@@ -215,13 +243,21 @@ class DocumentGrader:
             if "relevant" in response_text and "irrelevant" not in response_text[:20]:
                 score = "relevant"
                 # 확신도 추출 시도
-                if "매우" in response_text or "확실" in response_text or "명확" in response_text:
+                if (
+                    "매우" in response_text
+                    or "확실" in response_text
+                    or "명확" in response_text
+                ):
                     confidence = 0.9
                 elif "보통" in response_text or "어느정도" in response_text:
                     confidence = 0.7
                 else:
                     confidence = 0.8
-            elif "irrelevant" in response_text or "관련없" in response_text or "관련 없" in response_text:
+            elif (
+                "irrelevant" in response_text
+                or "관련없" in response_text
+                or "관련 없" in response_text
+            ):
                 score = "irrelevant"
                 confidence = 0.8
             else:
@@ -234,7 +270,9 @@ class DocumentGrader:
 
                 # 키워드 포함 여부 확인
                 matches = sum(1 for kw in question_keywords if kw in content_lower)
-                match_ratio = matches / len(question_keywords) if question_keywords else 0
+                match_ratio = (
+                    matches / len(question_keywords) if question_keywords else 0
+                )
 
                 if match_ratio >= 0.5:
                     score = "relevant"
@@ -245,14 +283,18 @@ class DocumentGrader:
 
             logger.debug(
                 "Document grading: %s (confidence: %.2f) for question: %s...",
-                score, confidence, question[:30]
+                score,
+                confidence,
+                question[:30],
             )
 
             return GradeScore(score=score, confidence=confidence)
 
         except Exception as e:  # pylint: disable=broad-except
             # 폴백 전략: LLM 실패 시에도 키워드 기반 평가로 처리
-            logger.warning("Document grading failed: %s, using conservative evaluation", e)
+            logger.warning(
+                "Document grading failed: %s, using conservative evaluation", e
+            )
 
             # 폴백: 보수적 평가 (간단한 키워드 매칭)
             content_lower = document.page_content.lower()
@@ -307,7 +349,10 @@ class DocumentGrader:
         confidences = []
 
         for doc, grade in graded_docs:
-            if grade.score == "relevant" and grade.confidence >= self.relevance_threshold:
+            if (
+                grade.score == "relevant"
+                and grade.confidence >= self.relevance_threshold
+            ):
                 relevant_docs.append(doc)
                 confidences.append(grade.confidence)
 
@@ -315,7 +360,9 @@ class DocumentGrader:
 
         logger.info(
             "Filtered %d/%d relevant documents (avg confidence: %.2f)",
-            len(relevant_docs), len(documents), avg_confidence
+            len(relevant_docs),
+            len(documents),
+            avg_confidence,
         )
 
         return relevant_docs, avg_confidence
@@ -338,7 +385,10 @@ class DocumentGrader:
         confidences = []
 
         for doc, grade in graded_docs:
-            if grade.score == "relevant" and grade.confidence >= self.relevance_threshold:
+            if (
+                grade.score == "relevant"
+                and grade.confidence >= self.relevance_threshold
+            ):
                 relevant_docs_with_scores.append((doc, grade.confidence))
                 confidences.append(grade.confidence)
 
@@ -346,7 +396,9 @@ class DocumentGrader:
 
         logger.info(
             "Filtered %d/%d relevant documents with scores (avg confidence: %.2f)",
-            len(relevant_docs_with_scores), len(documents), avg_confidence
+            len(relevant_docs_with_scores),
+            len(documents),
+            avg_confidence,
         )
 
         return relevant_docs_with_scores, avg_confidence

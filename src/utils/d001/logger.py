@@ -7,7 +7,7 @@ import logging
 import sys
 from typing import Optional
 
-from src.config import settings
+from src.utils.d001.config import settings
 
 
 def setup_logging(level: Optional[str] = None) -> None:

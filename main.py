@@ -34,15 +34,15 @@ def root():
     return {"message": "신혼부부 지원정책 RAG 서버가 실행 중입니다!"}
 
 
-from src.chains.d003.chain import answer_question
-from src.generation.d003.prompting import (
+from src.chains.index import answer_question
+from src.generation.index import (
     extract_link_info,
     format_answer_md,
     format_answer_html,
 )
 
 
-class D003QueryRequest(BaseModel):
+class QueryRequest(BaseModel):
     question: str
 
 
@@ -52,7 +52,7 @@ class SourceItem(BaseModel):
     source: str
 
 
-class D003QueryResponse(BaseModel):
+class QueryResponse(BaseModel):
     answer: str
     answer_md: str
     answer_html: str
@@ -60,9 +60,9 @@ class D003QueryResponse(BaseModel):
 
 
 # API 엔드포인트
-@app.post("/query", response_model=D003QueryResponse)
-def query_d003(request: D003QueryRequest):
-    # d003 체인 모듈을 사용해 답변 생성
+@app.post("/query", response_model=QueryResponse)
+def query(request: QueryRequest):
+    # 체인 모듈을 사용해 답변 생성
     answer, docs = answer_question(request.question, k=3)
 
     # 출처 정보 구성

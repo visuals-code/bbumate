@@ -51,7 +51,9 @@ class Settings:
     API_WORKERS: int = int(os.getenv("API_WORKERS", "4"))
 
     # CORS 설정
-    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080")
+    CORS_ORIGINS: str = os.getenv(
+        "CORS_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080"
+    )
 
     # Rate Limiting 설정
     RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "10"))
@@ -61,7 +63,9 @@ class Settings:
     RELEVANCE_THRESHOLD: float = float(os.getenv("RELEVANCE_THRESHOLD", "0.4"))
     CONFIDENCE_THRESHOLD: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.85"))
     USE_WEB_SEARCH: bool = os.getenv("USE_WEB_SEARCH", "true").lower() == "true"
-    USE_MOCK_WEB_SEARCH: bool = os.getenv("USE_MOCK_WEB_SEARCH", "false").lower() == "true"
+    USE_MOCK_WEB_SEARCH: bool = (
+        os.getenv("USE_MOCK_WEB_SEARCH", "false").lower() == "true"
+    )
 
     @classmethod
     def is_production(cls) -> bool:

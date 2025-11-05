@@ -10,8 +10,8 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_upstage import ChatUpstage
 
-from src.config import settings
-from src.exceptions import ConfigurationError, GenerationError
+from src.utils.d001.config import settings
+from src.utils.d001.exceptions import ConfigurationError, GenerationError
 from src.utils.d001.formatters import format_docs
 from src.utils.d001.logger import get_logger
 
@@ -37,7 +37,9 @@ def get_llm_model() -> ChatUpstage:
     logger.info("Upstage LLM 모델 '%s' 초기화", settings.UPSTAGE_CHAT_MODEL)
 
     # ChatUpstage는 UPSTAGE_API_KEY 환경 변수를 자동으로 사용
-    return ChatUpstage(model=settings.UPSTAGE_CHAT_MODEL, temperature=settings.LLM_TEMPERATURE)
+    return ChatUpstage(
+        model=settings.UPSTAGE_CHAT_MODEL, temperature=settings.LLM_TEMPERATURE
+    )
 
 
 def get_rag_prompt_template() -> ChatPromptTemplate:

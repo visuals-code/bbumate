@@ -3,6 +3,7 @@
 ## 사전 준비
 
 ### 1. 환경 변수 설정
+
 프로젝트 루트에 `.env` 파일을 생성하고 다음 변수를 설정하세요:
 
 ```dotenv
@@ -13,6 +14,7 @@ TAVILY_API_KEY=YOUR_TAVILY_API_KEY  # 웹 검색 기능 사용 시
 ```
 
 ### 2. 데이터 디렉토리 확인
+
 `data/d002/` 디렉토리에 다음 구조가 있어야 합니다:
 
 ```
@@ -31,16 +33,19 @@ data/d002/
 PDF 파일들을 HTML로 변환합니다.
 
 **실행 명령:**
+
 ```bash
 python src/ingestion/d002/convert_to_html.py --domain d002
 ```
 
 **설명:**
+
 - `data/d002/pdfs/` 디렉토리의 모든 PDF 파일을 읽어서
 - `data/d002/htmls/` 디렉토리에 HTML 파일로 변환합니다
 - 변환된 HTML 파일은 텍스트 추출을 위해 구조화된 형태로 저장됩니다
 
 **출력 예시:**
+
 ```
 INFO: 변환 중: tax_credit.pdf
 INFO: 변환 중: newlywed_home_purchase_loan.pdf
@@ -55,27 +60,32 @@ INFO: 출력 경로: data/d002/htmls
 HTML 파일들을 임베딩하여 Chroma VectorDB에 저장합니다.
 
 **기본 실행 명령:**
+
 ```bash
 python src/ingestion/d002/embed_store.py --domain d002
 ```
 
 **커스텀 청크 크기로 실행:**
+
 ```bash
 python src/ingestion/d002/embed_store.py --domain d002 --chunk-size 1500 --chunk-overlap 150
 ```
 
 **파라미터 설명:**
+
 - `--domain`: 도메인 이름 (필수, 예: d002)
 - `--chunk-size`: 청크 크기 (기본값: 1000)
 - `--chunk-overlap`: 청크 오버랩 (기본값: 100)
 
 **설명:**
+
 - `data/d002/htmls/` 디렉토리의 모든 HTML 파일을 읽어서
 - 텍스트를 추출하고 청크로 분할한 후
 - Upstage Embedding 모델로 임베딩하여
 - `data/d002/vector_store/` 디렉토리에 Chroma VectorDB로 저장합니다
 
 **출력 예시:**
+
 ```
 INFO: HTML 파일 로드 중: data/d002/htmls
 INFO: 25개 HTML 파일 발견
@@ -95,6 +105,7 @@ INFO: 원본 문서 수: 25
 ```
 
 **주의사항:**
+
 - 임베딩은 시간이 걸릴 수 있습니다 (문서 수와 크기에 따라 다름)
 - Upstage API 호출이 발생하므로 비용이 발생할 수 있습니다
 - `data/d002/vector_store/` 디렉토리가 생성됩니다
@@ -106,6 +117,7 @@ INFO: 원본 문서 수: 25
 문서 출처에 실제 URL을 매핑하려면 `data/d002/document_links.json` 파일을 수정하세요.
 
 **파일 형식:**
+
 ```json
 {
   "tax_credit.html": "https://www.nts.go.kr/nts/cm/cntnts/cntntsView.do?mi=6596&cntntsId=7875",
@@ -114,6 +126,7 @@ INFO: 원본 문서 수: 25
 ```
 
 **설명:**
+
 - 파일명을 키로, 실제 URL을 값으로 매핑합니다
 - API 응답의 `sources` 필드에 URL이 포함됩니다
 - 없어도 동작하지만, 출처 링크가 제공되지 않습니다
@@ -125,20 +138,24 @@ INFO: 원본 문서 수: 25
 RAG API 서버를 실행합니다.
 
 **방법 1: Python 모듈로 실행**
+
 ```bash
 python -m src.api.d002.api_d002
 ```
 
 **방법 2: Uvicorn으로 실행**
+
 ```bash
 uvicorn src.api.d002.api_d002:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 **설명:**
+
 - FastAPI 서버가 `http://127.0.0.1:8000`에서 실행됩니다
 - `--reload` 옵션을 사용하면 코드 변경 시 자동으로 재시작됩니다
 
 **출력 예시:**
+
 ```
 INFO:     Started server process [12345]
 INFO:     Waiting for application startup.
@@ -147,6 +164,7 @@ INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 ```
 
 **브라우저에서 테스트:**
+
 - FastAPI 자동 생성 문서: `http://127.0.0.1:8000/docs`
 - Swagger UI에서 API를 직접 테스트할 수 있습니다
 
@@ -159,11 +177,13 @@ INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 FastAPI가 자동으로 생성하는 Swagger UI를 사용하면 API를 쉽게 테스트할 수 있습니다.
 
 **Swagger UI 접속:**
+
 ```
 http://127.0.0.1:8000/docs
 ```
 
 **사용 방법:**
+
 1. 브라우저에서 `http://127.0.0.1:8000/docs` 접속
 2. `/query` 엔드포인트를 찾아서 클릭
 3. "Try it out" 버튼 클릭
@@ -176,6 +196,7 @@ http://127.0.0.1:8000/docs
 5. "Execute" 버튼 클릭하여 테스트
 
 **지역/주거형태 포함 테스트:**
+
 ```json
 {
   "question": "전세자금대출 조건 알려줘",
@@ -185,11 +206,13 @@ http://127.0.0.1:8000/docs
 ```
 
 ### 헬스체크 (curl)
+
 ```bash
 curl http://127.0.0.1:8000/
 ```
 
 **응답 예시:**
+
 ```json
 {
   "status": "ok",
@@ -199,6 +222,7 @@ curl http://127.0.0.1:8000/
 ```
 
 ### 질의 (Query)
+
 ```bash
 curl -X POST http://127.0.0.1:8000/query \
   -H "Content-Type: application/json" \
@@ -208,6 +232,7 @@ curl -X POST http://127.0.0.1:8000/query \
 ```
 
 **지역/주거형태 포함 질의:**
+
 ```bash
 curl -X POST http://127.0.0.1:8000/query \
   -H "Content-Type: application/json" \
@@ -219,6 +244,7 @@ curl -X POST http://127.0.0.1:8000/query \
 ```
 
 **응답 예시:**
+
 ```json
 {
   "answer": "신혼부부 전세자금대출 조건은 다음과 같습니다...",
@@ -259,28 +285,33 @@ uvicorn src.api.d002.api_d002:app --host 0.0.0.0 --port 8000 --reload
 ## 문제 해결
 
 ### 1. HTML 변환 실패
+
 - **원인**: PDF 파일이 손상되었거나 읽을 수 없음
 - **해결**: PDF 파일을 다시 확인하거나 다른 PDF 파일로 시도
 
 ### 2. 임베딩 실패
+
 - **원인**: `UPSTAGE_API_KEY`가 설정되지 않았거나 잘못됨
 - **해결**: `.env` 파일에 올바른 API 키가 설정되어 있는지 확인
 
 ### 3. VectorDB가 비어있음
+
 - **원인**: 임베딩이 실행되지 않았거나 실패함
 - **해결**: 2단계(임베딩)를 다시 실행하고 로그를 확인
 
 ### 4. API 서버 실행 실패
+
 - **원인**: 포트가 이미 사용 중이거나 의존성 패키지가 설치되지 않음
-- **해결**: 
+- **해결**:
   - **포트 충돌 시**: 프론트엔드가 8000 포트만 사용하므로, 8000 포트를 사용 중인 다른 프로세스를 종료하세요
     - Windows: `netstat -ano | findstr :8000`으로 프로세스 ID 확인 후 `taskkill /PID [PID] /F`로 종료
     - Mac/Linux: `lsof -ti:8000 | xargs kill -9`로 종료
   - 패키지 재설치: `pip install -r requirements.txt`
 
 ### 5. 검색 결과가 없음
+
 - **원인**: VectorDB가 비어있거나 질문이 너무 구체적임
-- **해결**: 
+- **해결**:
   - VectorDB에 데이터가 있는지 확인
   - 질문을 더 일반적으로 변경
 

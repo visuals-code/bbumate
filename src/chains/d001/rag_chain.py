@@ -8,8 +8,8 @@ from typing import Optional
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable, RunnablePassthrough
 
-from src.config import settings
-from src.exceptions import RAGException
+from src.utils.d001.config import settings
+from src.utils.d001.exceptions import RAGException
 from src.generation.d001.generator import get_llm_model, get_rag_prompt_template
 from src.retrieval.d001.retriever_factory import get_chroma_retriever
 from src.utils.d001.formatters import format_docs

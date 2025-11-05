@@ -17,14 +17,14 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from src.chains.d001.rag_chain import setup_rag_chain
-from src.config import settings
+from src.utils.d001.config import settings
 from src.retrieval.d001.retriever_factory import get_chroma_retriever
 from src.retrieval.d001.grader import create_grader
 from src.retrieval.d001.reranker import create_reranker
 from src.retrieval.d001.rewriter import create_rewriter
 from src.retrieval.d001.web_search import create_web_search_tool
 from src.generation.d001.generator import get_llm_model, get_rag_prompt_template
-from src.exceptions import (
+from src.utils.d001.exceptions import (
     ConfigurationError,
     DatabaseError,
     GenerationError,
@@ -129,12 +129,18 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 grader = create_grader(relevance_threshold=settings.RELEVANCE_THRESHOLD)
                 reranker = create_reranker(top_k=3)
                 rewriter = create_rewriter()
-                web_search = create_web_search_tool(max_results=3, use_mock=settings.USE_MOCK_WEB_SEARCH)
+                web_search = create_web_search_tool(
+                    max_results=3, use_mock=settings.USE_MOCK_WEB_SEARCH
+                )
                 llm = get_llm_model()
                 prompt = get_rag_prompt_template()
-                logger.info("Legacy Adaptive RAG components initialized successfully (fallback)")
+                logger.info(
+                    "Legacy Adaptive RAG components initialized successfully (fallback)"
+                )
             except Exception as fallback_e:  # pylint: disable=broad-except
-                logger.error("Legacy Adaptive RAG initialization also failed: %s", fallback_e)
+                logger.error(
+                    "Legacy Adaptive RAG initialization also failed: %s", fallback_e
+                )
                 grader = None
                 reranker = None
                 rewriter = None
@@ -145,7 +151,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     logger.info("=" * 80)
     logger.info("RAG Server Initialization Complete")
     logger.info("  - Basic RAG: %s", "Available" if rag_chain else "Unavailable")
-    logger.info("  - Adaptive RAG: %s", "Available" if adaptive_rag_chain else "Unavailable")
+    logger.info(
+        "  - Adaptive RAG: %s", "Available" if adaptive_rag_chain else "Unavailable"
+    )
     logger.info("=" * 80)
 
     yield
@@ -200,7 +208,9 @@ async def log_requests(request: Request, call_next: Any) -> Response:
     duration = time.time() - start_time
     logger.info(
         "Response: %d - Duration: %.3fs - Path: %s",
-        response.status_code, duration, request.url.path
+        response.status_code,
+        duration,
+        request.url.path,
     )
 
     return response
@@ -258,11 +268,19 @@ class QueryResponse(BaseModel):
     """질의응답 응답 모델."""
 
     answer: str | None = Field(None, description="AI가 생성한 답변 (순수 텍스트, 선택)")
-    answer_md: str | None = Field(None, description="마크다운 형식의 답변 (금액/비율 굵게 처리, 문장 단위 줄바꿈)")
-    answer_html: str | None = Field(None, description="HTML 형식의 답변 (금액/비율 <strong>, 줄바꿈 <br/>, 선택)")
-    sources: list[Source] | None = Field(None, description="답변 생성에 사용된 출처 목록")
+    answer_md: str | None = Field(
+        None, description="마크다운 형식의 답변 (금액/비율 굵게 처리, 문장 단위 줄바꿈)"
+    )
+    answer_html: str | None = Field(
+        None, description="HTML 형식의 답변 (금액/비율 <strong>, 줄바꿈 <br/>, 선택)"
+    )
+    sources: list[Source] | None = Field(
+        None, description="답변 생성에 사용된 출처 목록"
+    )
     needs_clarification: bool = Field(False, description="명확화 필요 여부")
-    clarification_questions: list[str] | None = Field(None, description="명확화 질문 리스트")
+    clarification_questions: list[str] | None = Field(
+        None, description="명확화 질문 리스트"
+    )
     clarification_session_id: str | None = Field(None, description="명확화 세션 ID")
 
 
@@ -274,7 +292,7 @@ class ErrorResponse(BaseModel):
     detail: str = Field(None, description="상세 정보")
     timestamp: str = Field(
         default_factory=lambda: datetime.utcnow().isoformat(),
-        description="발생 시각 (UTC)"
+        description="발생 시각 (UTC)",
     )
 
 
@@ -388,12 +406,17 @@ async def query_rag(query_request: QueryRequest, request: Request) -> QueryRespo
             if use_new_adaptive:
                 # Clarification 세션이 있는 경우 질문 재구성
                 final_question = sanitized_question
-                if query_request.clarification_session_id and query_request.clarification_answer:
+                if (
+                    query_request.clarification_session_id
+                    and query_request.clarification_answer
+                ):
                     logger.info("Refining question with clarification answer")
                     try:
-                        final_question = adaptive_rag_chain.refine_question_with_clarification(
-                            query_request.clarification_session_id,
-                            query_request.clarification_answer
+                        final_question = (
+                            adaptive_rag_chain.refine_question_with_clarification(
+                                query_request.clarification_session_id,
+                                query_request.clarification_answer,
+                            )
                         )
                         logger.info("Question refined: %s", final_question)
                     except ValueError as ve:
@@ -407,12 +430,14 @@ async def query_rag(query_request: QueryRequest, request: Request) -> QueryRespo
                 result = await adaptive_rag_chain.ainvoke(
                     question=final_question,
                     region=query_request.region,
-                    residence_type=query_request.residence_type
+                    residence_type=query_request.residence_type,
                 )
 
                 # 명확화가 필요한 경우
                 if result.get("needs_clarification"):
-                    logger.info("Clarification needed. Returning clarification questions.")
+                    logger.info(
+                        "Clarification needed. Returning clarification questions."
+                    )
                     record_query_success()
                     return QueryResponse(
                         answer=None,
@@ -470,21 +495,41 @@ async def query_rag(query_request: QueryRequest, request: Request) -> QueryRespo
                 logger.info("Retrieved %d documents from DB", len(retrieved_docs))
                 logger.info("  Step 1 Duration: %.3f seconds", step1_duration)
                 for i, doc in enumerate(retrieved_docs):
-                    logger.debug("  Doc %d: %s (length: %d chars)", i+1, doc.metadata.get('source', 'unknown'), len(doc.page_content))
+                    logger.debug(
+                        "  Doc %d: %s (length: %d chars)",
+                        i + 1,
+                        doc.metadata.get("source", "unknown"),
+                        len(doc.page_content),
+                    )
 
                 logger.info("Step 2: Grading document relevance")
 
                 step2_start = time.time()
-                relevant_docs_with_scores, avg_confidence = await grader.afilter_relevant_documents_with_scores(
-                    sanitized_question, retrieved_docs
+                relevant_docs_with_scores, avg_confidence = (
+                    await grader.afilter_relevant_documents_with_scores(
+                        sanitized_question, retrieved_docs
+                    )
                 )
                 step2_duration = time.time() - step2_start
 
-                logger.info("Grading complete: %d/%d documents are relevant", len(relevant_docs_with_scores), len(retrieved_docs))
-                logger.info("Average confidence score: %.3f (threshold: %.3f)", avg_confidence, settings.CONFIDENCE_THRESHOLD)
+                logger.info(
+                    "Grading complete: %d/%d documents are relevant",
+                    len(relevant_docs_with_scores),
+                    len(retrieved_docs),
+                )
+                logger.info(
+                    "Average confidence score: %.3f (threshold: %.3f)",
+                    avg_confidence,
+                    settings.CONFIDENCE_THRESHOLD,
+                )
                 logger.info("  Step 2 Duration: %.3f seconds", step2_duration)
                 for i, (doc, score) in enumerate(relevant_docs_with_scores):
-                    logger.debug("  Relevant doc %d: score=%.3f, source=%s", i+1, score, doc.metadata.get('source', 'unknown'))
+                    logger.debug(
+                        "  Relevant doc %d: score=%.3f, source=%s",
+                        i + 1,
+                        score,
+                        doc.metadata.get("source", "unknown"),
+                    )
 
                 logger.info("Step 3: Reranking documents by relevance score")
 
@@ -495,33 +540,53 @@ async def query_rag(query_request: QueryRequest, request: Request) -> QueryRespo
                 logger.info("Reranked to top %d documents", len(reranked_docs))
                 logger.info("  Step 3 Duration: %.3f seconds", step3_duration)
                 for i, doc in enumerate(reranked_docs):
-                    logger.debug("  Reranked doc %d: %s", i+1, doc.metadata.get('source', 'unknown'))
+                    logger.debug(
+                        "  Reranked doc %d: %s",
+                        i + 1,
+                        doc.metadata.get("source", "unknown"),
+                    )
 
-                use_db_docs = len(reranked_docs) > 0 and avg_confidence >= settings.CONFIDENCE_THRESHOLD
+                use_db_docs = (
+                    len(reranked_docs) > 0
+                    and avg_confidence >= settings.CONFIDENCE_THRESHOLD
+                )
 
                 logger.info("Step 4: Decision making")
                 logger.info("  - Reranked docs count: %d", len(reranked_docs))
                 logger.info("  - Average confidence: %.3f", avg_confidence)
-                logger.info("  - Confidence threshold: %.3f", settings.CONFIDENCE_THRESHOLD)
+                logger.info(
+                    "  - Confidence threshold: %.3f", settings.CONFIDENCE_THRESHOLD
+                )
                 logger.info("  - Use DB docs: %s", use_db_docs)
 
                 step4_start = time.time()
 
                 if use_db_docs:
-                    logger.info("DECISION: Using DB documents (%d reranked docs, confidence=%.3f >= %.3f)",
-                        len(reranked_docs), avg_confidence, settings.CONFIDENCE_THRESHOLD
+                    logger.info(
+                        "DECISION: Using DB documents (%d reranked docs, confidence=%.3f >= %.3f)",
+                        len(reranked_docs),
+                        avg_confidence,
+                        settings.CONFIDENCE_THRESHOLD,
                     )
                     context_docs = reranked_docs
                     source_type = "database"
                 else:
                     if not settings.USE_WEB_SEARCH or web_search is None:
-                        logger.warning("DECISION: Insufficient relevant documents but web search is disabled")
-                        logger.warning("  Using retrieved documents as fallback (%d docs)", len(retrieved_docs))
+                        logger.warning(
+                            "DECISION: Insufficient relevant documents but web search is disabled"
+                        )
+                        logger.warning(
+                            "  Using retrieved documents as fallback (%d docs)",
+                            len(retrieved_docs),
+                        )
                         context_docs = retrieved_docs
                         source_type = "database_fallback"
                     else:
-                        logger.info("DECISION: Insufficient relevant documents (%d docs, confidence=%.3f < %.3f)",
-                            len(reranked_docs), avg_confidence, settings.CONFIDENCE_THRESHOLD
+                        logger.info(
+                            "DECISION: Insufficient relevant documents (%d docs, confidence=%.3f < %.3f)",
+                            len(reranked_docs),
+                            avg_confidence,
+                            settings.CONFIDENCE_THRESHOLD,
                         )
                         logger.info("  Falling back to web search...")
 
@@ -544,10 +609,17 @@ async def query_rag(query_request: QueryRequest, request: Request) -> QueryRespo
                             source_type = "web_search"
                             logger.info("Found %d web search results", len(web_docs))
                             for i, doc in enumerate(web_docs):
-                                logger.debug("  Web doc %d: %s", i+1, doc.metadata.get('source', 'unknown'))
+                                logger.debug(
+                                    "  Web doc %d: %s",
+                                    i + 1,
+                                    doc.metadata.get("source", "unknown"),
+                                )
                         else:
                             logger.warning("Web search returned no results")
-                            logger.warning("  Using original retrieved documents as fallback (%d docs)", len(retrieved_docs))
+                            logger.warning(
+                                "  Using original retrieved documents as fallback (%d docs)",
+                                len(retrieved_docs),
+                            )
                             context_docs = retrieved_docs
                             source_type = "database_fallback"
 
@@ -573,17 +645,23 @@ async def query_rag(query_request: QueryRequest, request: Request) -> QueryRespo
                     )
 
                 chain = prompt | llm | StrOutputParser()
-                answer = await chain.ainvoke({"context": context_text, "question": sanitized_question})
+                answer = await chain.ainvoke(
+                    {"context": context_text, "question": sanitized_question}
+                )
 
                 step5_duration = time.time() - step5_start
 
-                logger.info("Answer generated successfully (source: %s)", source_type.upper())
+                logger.info(
+                    "Answer generated successfully (source: %s)", source_type.upper()
+                )
                 logger.info("  Step 5 Duration: %.3f seconds", step5_duration)
                 logger.debug("  Answer length: %d chars", len(answer))
 
                 # sources는 실제 사용된 문서에서 추출
                 sources_data = extract_sources_from_docs(context_docs)
-                logger.info("  Extracted %d sources from context docs", len(sources_data))
+                logger.info(
+                    "  Extracted %d sources from context docs", len(sources_data)
+                )
                 logger.info("=" * 60)
             else:
                 # 기본 RAG 사용

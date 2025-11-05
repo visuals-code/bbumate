@@ -5,7 +5,7 @@
 
 import re
 
-from src.exceptions import RAGException
+from src.utils.d001.exceptions import RAGException
 from src.utils.d001.logger import get_logger
 
 logger = get_logger(__name__)

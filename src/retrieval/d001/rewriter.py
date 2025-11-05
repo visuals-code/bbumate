@@ -7,7 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_upstage import ChatUpstage
 
-from src.config import settings
+from src.utils.d001.config import settings
 from src.utils.d001.logger import get_logger
 
 logger = get_logger(__name__)
@@ -48,10 +48,12 @@ class QueryRewriter:
 
 재작성된 검색 쿼리만 출력하세요 (설명 없이):"""
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_template),
-            ("human", "검색 쿼리를 재작성해주세요."),
-        ])
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_template),
+                ("human", "검색 쿼리를 재작성해주세요."),
+            ]
+        )
 
         return prompt
 
@@ -78,7 +80,7 @@ class QueryRewriter:
             logger.error("Query rewriting failed: %s", e)
             # 실패 시 원본 질문 반환
             return question
-            
+
     async def arewrite(self, question: str) -> str:
         """질문을 비동기적으로 검색에 적합한 형태로 재작성합니다.
 

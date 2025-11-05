@@ -5,8 +5,8 @@ Upstage 임베딩 모델을 초기화하고 제공하는 공통 유틸리티입�
 
 from langchain_upstage import UpstageEmbeddings
 
-from src.config import settings
-from src.exceptions import ConfigurationError, EmbeddingError
+from src.utils.d001.config import settings
+from src.utils.d001.exceptions import ConfigurationError, EmbeddingError
 from src.utils.d001.logger import get_logger
 
 logger = get_logger(__name__)

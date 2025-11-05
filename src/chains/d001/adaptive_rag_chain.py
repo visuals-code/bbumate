@@ -21,8 +21,8 @@ from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 
 from src.chains.d001.clarification_chain import create_clarification_chain
-from src.config import settings
-from src.exceptions import RAGException
+from src.utils.d001.config import settings
+from src.utils.d001.exceptions import RAGException
 from src.generation.d001.generator import get_llm_model, get_rag_prompt_template
 from src.retrieval.d001.grader import create_grader
 from src.retrieval.d001.reranker import create_reranker
@@ -74,21 +74,28 @@ class AdaptiveRAGChain:
 
         # Clarification component
         if self.use_clarification:
-            self.clarification_chain = create_clarification_chain(ambiguity_threshold=ambiguity_threshold)
+            self.clarification_chain = create_clarification_chain(
+                ambiguity_threshold=ambiguity_threshold
+            )
         else:
             self.clarification_chain = None
 
         logger.info(
             "Adaptive RAG Chain initialized (k=%d, top_k=%d, relevance_threshold=%.2f, "
             "confidence_threshold=%.2f, use_clarification=%s, ambiguity_threshold=%.2f)",
-            k, top_k, relevance_threshold, confidence_threshold, use_clarification, ambiguity_threshold
+            k,
+            top_k,
+            relevance_threshold,
+            confidence_threshold,
+            use_clarification,
+            ambiguity_threshold,
         )
 
     async def ainvoke(
         self,
         question: str,
         region: Optional[str] = None,
-        residence_type: Optional[List[str]] = None
+        residence_type: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """비동기적으로 RAG 파이프라인을 실행합니다.
 
@@ -138,7 +145,10 @@ class AdaptiveRAGChain:
             if ambiguity_score.is_ambiguous:
                 logger.info("  Question is ambiguous. Clarification needed.")
                 logger.info("  Reasons: %s", ambiguity_score.reasons)
-                logger.info("  Clarification questions: %s", ambiguity_score.clarification_questions)
+                logger.info(
+                    "  Clarification questions: %s",
+                    ambiguity_score.clarification_questions,
+                )
 
                 # Create clarification session
                 session_id = self.clarification_chain.create_session(
@@ -178,12 +188,18 @@ class AdaptiveRAGChain:
         logger.info("=" * 80)
 
         step2_start = time.perf_counter()
-        relevant_docs_with_scores, avg_confidence = await self.grader.afilter_relevant_documents_with_scores(
-            final_question, retrieved_docs
+        relevant_docs_with_scores, avg_confidence = (
+            await self.grader.afilter_relevant_documents_with_scores(
+                final_question, retrieved_docs
+            )
         )
         step2_duration = time.perf_counter() - step2_start
 
-        logger.info("  Relevant documents: %d/%d", len(relevant_docs_with_scores), len(retrieved_docs))
+        logger.info(
+            "  Relevant documents: %d/%d",
+            len(relevant_docs_with_scores),
+            len(retrieved_docs),
+        )
         logger.info("  Average confidence: %.2f", avg_confidence)
         logger.info("  Step 2 Duration: %.3f seconds", step2_duration)
 
@@ -200,7 +216,9 @@ class AdaptiveRAGChain:
         logger.info("  Step 3 Duration: %.3f seconds", step3_duration)
 
         # Step 4: Decision
-        use_db_docs = len(reranked_docs) > 0 and avg_confidence >= self.confidence_threshold
+        use_db_docs = (
+            len(reranked_docs) > 0 and avg_confidence >= self.confidence_threshold
+        )
 
         logger.info("\n" + "=" * 80)
         logger.info("Step 4: Decision Making")
@@ -222,7 +240,9 @@ class AdaptiveRAGChain:
                 context_docs = retrieved_docs
                 source = "database_fallback"
             else:
-                logger.info("  DECISION: Insufficient relevant docs. Falling back to web search")
+                logger.info(
+                    "  DECISION: Insufficient relevant docs. Falling back to web search"
+                )
 
                 logger.info("\n" + "=" * 80)
                 logger.info("Step 4a: Query Rewriting")
@@ -249,7 +269,9 @@ class AdaptiveRAGChain:
                     source = "web_search"
                     logger.info("  Found %d web search results", len(web_docs))
                 else:
-                    logger.warning("  Web search returned no results. Using DB docs as fallback")
+                    logger.warning(
+                        "  Web search returned no results. Using DB docs as fallback"
+                    )
                     context_docs = retrieved_docs
                     source = "database_fallback"
 
@@ -266,7 +288,9 @@ class AdaptiveRAGChain:
         logger.info("  Context docs count: %d", len(context_docs))
 
         step5_start = time.perf_counter()
-        answer = await self._agenerate_answer(final_question, context_docs, source, region, residence_type)
+        answer = await self._agenerate_answer(
+            final_question, context_docs, source, region, residence_type
+        )
         step5_duration = time.perf_counter() - step5_start
 
         logger.info("  Answer generated successfully")
@@ -280,14 +304,17 @@ class AdaptiveRAGChain:
         logger.info("=" * 80)
         logger.info("TIMING SUMMARY:")
         if self.use_clarification and self.clarification_chain:
-            logger.info("  Step 0 (Clarification): %.3f s", step_duration if 'step_duration' in locals() else 0.0)
+            logger.info(
+                "  Step 0 (Clarification): %.3f s",
+                step_duration if "step_duration" in locals() else 0.0,
+            )
         logger.info("  Step 1 (Retrieve):      %.3f s", step1_duration)
         logger.info("  Step 2 (Grade):         %.3f s", step2_duration)
         logger.info("  Step 3 (Rerank):        %.3f s", step3_duration)
         logger.info("  Step 4 (Decision):      %.3f s", step4_duration)
-        if 'step4a_duration' in locals():
+        if "step4a_duration" in locals():
             logger.info("    - Step 4a (Rewrite): %.3f s", step4a_duration)
-        if 'step4b_duration' in locals():
+        if "step4b_duration" in locals():
             logger.info("    - Step 4b (WebSearch): %.3f s", step4b_duration)
         logger.info("  Step 5 (Generate):      %.3f s", step5_duration)
         logger.info("  " + "-" * 50)
@@ -308,7 +335,7 @@ class AdaptiveRAGChain:
         context_docs: List[Document],
         source: str,
         region: Optional[str] = None,
-        residence_type: Optional[List[str]] = None
+        residence_type: Optional[List[str]] = None,
     ) -> str:
         """답변을 생성합니다 (사용자 컨텍스트 포함).
 
@@ -357,11 +384,15 @@ class AdaptiveRAGChain:
             logger.info("  User context: %s", user_context)
 
         chain = self.prompt | self.llm | StrOutputParser()
-        answer = await chain.ainvoke({"context": context_text, "question": enriched_question})
+        answer = await chain.ainvoke(
+            {"context": context_text, "question": enriched_question}
+        )
 
         return answer
 
-    def refine_question_with_clarification(self, session_id: str, clarification_answer: str) -> str:
+    def refine_question_with_clarification(
+        self, session_id: str, clarification_answer: str
+    ) -> str:
         """명확화 응답으로 질문을 재구성합니다.
 
         Args:
@@ -377,7 +408,9 @@ class AdaptiveRAGChain:
         if not self.clarification_chain:
             raise ValueError("Clarification chain is not enabled")
 
-        refined_question = self.clarification_chain.refine_question(session_id, clarification_answer)
+        refined_question = self.clarification_chain.refine_question(
+            session_id, clarification_answer
+        )
         logger.info("Question refined: %s", refined_question)
 
         # 세션 정리
@@ -387,8 +420,10 @@ class AdaptiveRAGChain:
 
     async def aget_workflow_info(self, question: str) -> Dict[str, Any]:
         retrieved_docs = await self.retriever.ainvoke(question)
-        relevant_docs_with_scores, avg_confidence = await self.grader.afilter_relevant_documents_with_scores(
-            question, retrieved_docs
+        relevant_docs_with_scores, avg_confidence = (
+            await self.grader.afilter_relevant_documents_with_scores(
+                question, retrieved_docs
+            )
         )
         reranked_docs = self.reranker.rerank(relevant_docs_with_scores)
         use_db = len(reranked_docs) > 0 and avg_confidence >= self.confidence_threshold
@@ -402,6 +437,7 @@ class AdaptiveRAGChain:
             "confidence_threshold": self.confidence_threshold,
             "decision": "use_database" if use_db else "use_web_search",
         }
+
 
 def setup_adaptive_rag_chain(
     k: Optional[int] = None,
@@ -447,4 +483,3 @@ def setup_adaptive_rag_chain(
     except Exception as e:
         logger.error("Adaptive RAG Chain setup failed: %s", e)
         raise RAGException(f"Adaptive RAG Chain 설정 실패: {e}") from e
-
