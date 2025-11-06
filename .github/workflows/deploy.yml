@@ -25,22 +25,25 @@ jobs:
           set -e
           cd ~/ai-assistant/KDT_BE13_Toy_Project4
 
-          echo "1. Pulling latest code..."
+          echo "1. Switching to SSH remote..."
+          git remote set-url origin git@github.com:visuals-code/KDT_BE13_Toy_Project4.git
+
+          echo "2. Pulling latest code..."
           git pull origin main
 
-          echo "2. Activating virtual environment..."
+          echo "3. Activating virtual environment..."
           source venv/bin/activate
 
-          echo "3. Installing dependencies..."
+          echo "4. Installing dependencies..."
           pip install -r requirements.txt
 
-          echo "4. Writing .env file..."
+          echo "5. Writing .env file..."
           echo "${{ secrets.ENV_FILE }}" > .env
 
-          echo "5. Running ingestion script..."
+          echo "6. Running ingestion script..."
           python run_ingestion.py
 
-          echo "6. Restarting FastAPI service..."
+          echo "7. Restarting FastAPI service..."
           sudo systemctl restart fastapi
           echo "✅ Deployment complete!"
           EOF
