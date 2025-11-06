@@ -11,10 +11,11 @@ langchain-community==0.3.*
 langchain-upstage>=0.1.6
 
 # LangGraph (compatible with LangChain 0.3.x)
-langgraph==0.2.*
+langgraph>=0.2.45
 
 # Vector Store
 chromadb>=0.5.5
+langchain-chroma>=0.1.1
 
 # Optional: ensure Pydantic v2 (FastAPI dependency, included transitively)
 pydantic>=2.7,<3
