@@ -39,7 +39,6 @@ from src.chains.index import answer_question
 from src.ingestion.index import ingest
 from src.api.d002.api_d002 import (
     markdown_to_text,
-    format_to_markdown,
     markdown_to_html,
     format_sources,
 )
@@ -98,6 +97,7 @@ class IngestRequest(BaseModel):
     mode: str = "pdf"
     chunk_size: int = 1000
     chunk_overlap: int = 200
+    force_recreate: bool = False  # 기존 DB를 삭제하고 재생성할지 여부 (주의: True 시 모든 데이터 삭제)
 
 
 class IngestResponse(BaseModel):
@@ -150,8 +150,9 @@ def query(request: QueryRequest):
     )
 
     # LLM이 마크다운 형식으로 생성하므로 변환
+    # answer는 이미 마크다운 형식이므로 answer_md는 그대로 사용
     answer_text = markdown_to_text(answer)  # 순수 텍스트
-    answer_md = format_to_markdown(answer)  # 마크다운 (정리)
+    answer_md = answer.strip()  # 마크다운 (이미 마크다운 형식이므로 그대로 사용)
     answer_html = markdown_to_html(answer)  # HTML 변환
 
     # sources 객체 배열로 변환
@@ -172,7 +173,10 @@ def query(request: QueryRequest):
 def run_ingest(request: IngestRequest):
     """도메인별 문서 ingestion 실행 (관리자용).
 
-    주의: ingestion은 시간이 오래 걸릴 수 있으며, 벡터 DB를 재생성합니다.
+    주의:
+    - ingestion은 시간이 오래 걸릴 수 있습니다
+    - force_recreate=False (기본값): 기존 DB가 있으면 재생성하지 않습니다
+    - force_recreate=True: 기존 DB를 삭제하고 재생성합니다 (주의!)
     """
     try:
         ingest(
@@ -181,6 +185,7 @@ def run_ingest(request: IngestRequest):
             mode=request.mode if request.domain == "d003" else "pdf",
             chunk_size=request.chunk_size,
             chunk_overlap=request.chunk_overlap,
+            force_recreate=request.force_recreate,  # API에서는 기본값 False로 안전하게 처리
         )
         return {
             "message": f"Ingestion completed successfully for domain {request.domain}",

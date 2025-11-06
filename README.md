@@ -90,6 +90,9 @@ CHROMA_DB_DIR=./chroma_storage
 ```bash
 python3 -m venv venv
 source venv/bin/activate
+
+# powershell
+.\venv\Scripts\Activate.ps1
 ```
 
 2. 패키지 설치(버전 고정: LangChain 0.3)
@@ -106,7 +109,15 @@ pip install -r requirements.txt
 cat .env
 ```
 
-5. 서버 실행
+5. **벡터 DB 생성 (중요: 서버 실행 전 필수)**
+
+```bash
+python run_ingestion.py
+```
+
+이 단계는 배포 시 **반드시 실행**해야 합니다. 벡터 DB를 생성하지 않으면 RAG 검색이 동작하지 않습니다.
+
+6. 서버 실행
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload

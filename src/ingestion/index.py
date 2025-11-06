@@ -42,6 +42,7 @@ def ingest(
     chunk_size: int = 1000,
     chunk_overlap: int = 200,
     persist_dir: Optional[str] = None,
+    force_recreate: bool = True,  # 기존 DB 재생성 여부 (기본값: True - 기존 동작 유지)
 ) -> None:
     """통합 ingestion 함수: 도메인별 적절한 파이프라인 실행.
 
@@ -175,10 +176,16 @@ def ingest(
         
         start_time = time.perf_counter()
         
-        # 기존 DB 삭제 (새로 생성하기 위해)
+        # 기존 DB 처리
         if os.path.exists(db_path):
-            print(f"[Unified DB] Removing existing database...")
-            shutil.rmtree(db_path)
+            if force_recreate:
+                print(f"[Unified DB] Removing existing database...")
+                shutil.rmtree(db_path)
+            else:
+                print(f"[WARN] 기존 DB가 존재합니다: {db_path}")
+                print(f"[WARN] DB를 재생성하려면 force_recreate=True를 설정하세요.")
+                print(f"[WARN] 기존 DB를 사용합니다.")
+                return
         
         # 통합 벡터 DB 생성 및 저장
         # Chroma 0.4.x부터는 자동으로 persist되므로 persist() 호출 불필요
