@@ -28,11 +28,11 @@ def load_pdfs(directory_path: Path) -> List[Document]:
         )
 
         documents = loader.load()
-        print(f"✅ 총 {len(documents)}개의 문서 페이지/청크를 로드했습니다.")
+        print(f"총 {len(documents)}개의 문서 페이지/청크를 로드했습니다.")
         return documents
     except FileNotFoundError:
         print(
-            f"❌ 파일 로드 중 FileNotFoundError 발생: "
+            f"파일 로드 중 FileNotFoundError 발생: "
             f"PDF 파일을 {directory_path}에 넣어주세요."
         )
         return []

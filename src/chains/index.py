@@ -12,7 +12,7 @@ from langchain_chroma import Chroma
 from langchain_upstage import ChatUpstage, UpstageEmbeddings
 
 # d002의 함수들을 import해서 사용
-from src.chains.d002.rag_chain import run_rag, _format_docs
+from KDT_BE13_Toy_Project4.src.chains.d002.rag_chain import run_rag, _format_docs
 from src.utils.d002.loaders import load_llm
 
 load_dotenv()
@@ -81,7 +81,7 @@ def answer_question(
         }
     """
     # d002의 build_rag_chain을 임시로 통합 DB를 사용하도록 패치
-    import src.chains.d002.rag_chain as rag_chain_module
+    import KDT_BE13_Toy_Project4.src.chains.d002.rag_chain as rag_chain_module
 
     # 통합 DB를 사용하는 build_rag_chain 함수로 임시 교체
     original_build = rag_chain_module.build_rag_chain

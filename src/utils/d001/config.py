@@ -156,5 +156,5 @@ if "pytest" not in sys.modules and "unittest" not in sys.modules:
     try:
         settings.validate()
     except ValueError as e:
-        print(f"❌ Configuration Error:\n{e}", file=sys.stderr)
+        print(f"Configuration Error:\n{e}", file=sys.stderr)
         sys.exit(1)

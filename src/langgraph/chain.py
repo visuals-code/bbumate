@@ -1,7 +1,7 @@
-"""LangGraph 기반 RAG 체인 정의.
+"""Chain index (LangGraph 통합 버전): 통합 DB 기반 RAG 파이프라인.
 
-기존 chains/d002/rag_chain.py의 LangChain 구조를 LangGraph로 변환.
-retrieval, generation은 d002 폴더의 일반 함수들을 import해서 사용.
+d002 rag_chain_graph.py의 모든 LangGraph 로직을 통합하고,
+통합 DB를 직접 사용하도록 수정한 버전입니다.
 """
 
 import os
@@ -14,7 +14,6 @@ from langchain_core.documents import Document
 from langchain_chroma import Chroma
 from langchain_upstage import ChatUpstage, UpstageEmbeddings
 
-# d002 폴더의 일반 함수들 import (기존과 동일)
 from src.utils.d002.loaders import load_llm
 from src.utils.d002.context_extraction import apply_region_housing_priority
 from src.retrieval.d002.grader import grade_docs
@@ -86,6 +85,11 @@ def load_unified_vector_db() -> Chroma:
     )
 
 
+def build_llm() -> ChatUpstage:
+    """Upstage LLM 로드."""
+    return load_llm()
+
+
 def _format_docs(docs: List[Any]) -> str:
     """문서들을 컨텍스트 형식으로 포맷팅."""
     lines = []
@@ -97,7 +101,7 @@ def _format_docs(docs: List[Any]) -> str:
     return "\n\n---\n\n".join(lines) if lines else "제공된 문서 없음"
 
 
-# Node 함수들 (기존 rag_chain.py의 로직을 Node로 분리)
+# Node 함수들
 def initialize_node(state: RAGState) -> RAGState:
     """초기화: retriever, llm 로드 및 컨텍스트 처리 (통합 DB 사용)."""
     if state.get("verbose"):
@@ -105,10 +109,9 @@ def initialize_node(state: RAGState) -> RAGState:
 
     # 통합 DB 직접 로드
     vectordb = load_unified_vector_db()
-    llm = load_llm()
+    llm = build_llm()
     retriever = vectordb.as_retriever(search_kwargs={"k": state.get("k", 3)})
 
-    # 지역/주거형태 우선순위 적용
     final_region, final_housing_type = apply_region_housing_priority(
         state["question"], state.get("region"), state.get("housing_type")
     )
@@ -135,20 +138,18 @@ def initialize_node(state: RAGState) -> RAGState:
 
 
 def validate_node(state: RAGState) -> RAGState:
-    """질문 검증: 도메인 관련성 + 명확성 (d002/validation.py 함수 사용)."""
+    """질문 검증: 도메인 관련성 + 명확성."""
     if state.get("verbose"):
         print("\n[Validate] 질문 검증 중...")
 
     if not state.get("use_validation", True):
         return state
 
-    # is_question_clear: d002 폴더의 일반 함수
     if is_question_clear(state["question"]):
         if state.get("verbose"):
             print("[Validation 스킵: 명확한 질문]")
         return state
 
-    # validate_question: d002 폴더의 일반 함수
     is_valid, reason, clarification_q = validate_question(
         state["question"], state["_llm"]
     )
@@ -171,7 +172,7 @@ def validate_node(state: RAGState) -> RAGState:
 
 
 def retrieve_node(state: RAGState) -> RAGState:
-    """문서 검색 (retriever 사용)."""
+    """문서 검색."""
     if state.get("verbose"):
         print("\n[Retrieve] 문서 검색 중...")
 
@@ -191,7 +192,7 @@ def retrieve_node(state: RAGState) -> RAGState:
 
 
 def grade_node(state: RAGState) -> RAGState:
-    """문서 평가: 관련성 필터링 (d002/grader.py 함수 사용)."""
+    """문서 평가: 관련성 필터링."""
     if state.get("verbose"):
         print("\n[Grade] 문서 관련성 평가 중...")
 
@@ -200,7 +201,6 @@ def grade_node(state: RAGState) -> RAGState:
     if not state.get("use_grade", True) or not initial_docs:
         graded_docs = initial_docs
     else:
-        # grade_docs: d002 폴더의 일반 함수
         graded_docs = grade_docs(state["question"], initial_docs, state["_llm"])
         if state.get("verbose"):
             print(f"[Grade 결과] {len(initial_docs)}개 → {len(graded_docs)}개")
@@ -213,14 +213,13 @@ def grade_node(state: RAGState) -> RAGState:
 
 
 def generate_docs_node(state: RAGState) -> RAGState:
-    """문서 기반 답변 생성 (d002/generator.py 함수 사용)."""
+    """문서 기반 답변 생성."""
     if state.get("verbose"):
         print("\n[Generate Docs] 문서 기반 답변 생성 중...")
 
     graded_docs = state.get("graded_docs", [])
     context = _format_docs(graded_docs)
 
-    # generate_with_docs_context: d002 폴더의 일반 함수
     answer = generate_with_docs_context(
         state["question"],
         context,
@@ -242,11 +241,10 @@ def generate_docs_node(state: RAGState) -> RAGState:
 
 
 def rewrite_node(state: RAGState) -> RAGState:
-    """쿼리 재작성 (d002/web_search.py 함수 사용)."""
+    """쿼리 재작성."""
     if state.get("verbose"):
         print("\n[Rewrite] 쿼리 재작성 중...")
 
-    # rewrite_query: d002 폴더의 일반 함수
     rewritten = rewrite_query(state["question"], state["_llm"])
 
     if state.get("verbose"):
@@ -259,13 +257,11 @@ def rewrite_node(state: RAGState) -> RAGState:
 
 
 def web_search_node(state: RAGState) -> RAGState:
-    """웹 검색 (d002/web_search.py 함수 사용)."""
+    """웹 검색."""
     if state.get("verbose"):
         print("\n[Web Search] 웹 검색 중...")
 
     rewritten = state.get("rewritten_query", state["question"])
-
-    # web_search: d002 폴더의 일반 함수
     web_results, web_metadata = web_search(rewritten)
 
     if state.get("verbose"):
@@ -280,11 +276,10 @@ def web_search_node(state: RAGState) -> RAGState:
 
 
 def generate_web_node(state: RAGState) -> RAGState:
-    """웹 검색 결과 기반 답변 생성 (d002/generator.py 함수 사용)."""
+    """웹 검색 결과 기반 답변 생성."""
     if state.get("verbose"):
         print("\n[Generate Web] 웹 검색 결과 기반 답변 생성 중...")
 
-    # generate_with_web_context: d002 폴더의 일반 함수
     answer = generate_with_web_context(
         state["question"],
         state.get("web_results", ""),
@@ -324,11 +319,11 @@ def finalize_node(state: RAGState) -> RAGState:
     }
 
 
-# Conditional Edge 함수들 (기존 rag_chain.py의 if/else 로직을 조건부 Edge로 변환)
+# Conditional Edge 함수들
 def should_continue_after_validate(
     state: RAGState,
 ) -> Literal["retrieve", "end"]:
-    """Validation 후 라우팅 (기존: if not is_valid → return)."""
+    """Validation 후 라우팅."""
     if state.get("is_valid", True):
         return "retrieve"
     return "end"
@@ -337,7 +332,7 @@ def should_continue_after_validate(
 def should_continue_after_grade(
     state: RAGState,
 ) -> Literal["generate_docs", "rewrite"]:
-    """Grade 후 라우팅 (기존: if graded_docs → Generate, else → Web Search)."""
+    """Grade 후 라우팅."""
     graded_docs = state.get("graded_docs", [])
     if graded_docs:
         return "generate_docs"
@@ -347,7 +342,7 @@ def should_continue_after_grade(
 def should_continue_after_generate_docs(
     state: RAGState,
 ) -> Literal["rewrite", "finalize"]:
-    """Generate Docs 후 라우팅 (기존: "정보 없음" 패턴 감지 → Web Search)."""
+    """Generate Docs 후 라우팅."""
     answer = state.get("answer", "")
 
     no_info_patterns = [
@@ -367,14 +362,10 @@ def should_continue_after_generate_docs(
 
 
 def build_rag_graph() -> StateGraph:
-    """RAG 파이프라인 그래프 구성.
-
-    기존 rag_chain.py의 플로우:
-    1. Question Validation → 2. Retrieve → 3. Grade → 4. Generate (또는 Web Search)
-    """
+    """RAG 파이프라인 그래프 구성."""
     workflow = StateGraph(RAGState)
 
-    # Nodes 추가
+    # Nodes
     workflow.add_node("initialize", initialize_node)
     workflow.add_node("validate", validate_node)
     workflow.add_node("retrieve", retrieve_node)
@@ -385,10 +376,10 @@ def build_rag_graph() -> StateGraph:
     workflow.add_node("generate_web", generate_web_node)
     workflow.add_node("finalize", finalize_node)
 
-    # Entry point
+    # Entry
     workflow.set_entry_point("initialize")
 
-    # Edges 추가 (기존 rag_chain.py의 플로우 그대로)
+    # Edges
     workflow.add_edge("initialize", "validate")
     workflow.add_conditional_edges(
         "validate",
@@ -434,8 +425,6 @@ def answer_question(
 ) -> Dict[str, Any]:
     """질문에 답변하고 문서 출처를 반환 (LangGraph 버전, 통합 DB 사용).
 
-    기존 rag_chain.py의 run_rag 함수를 LangGraph로 변환.
-
     Args:
         question: 사용자 질문
         k: 검색할 문서 개수 (기본값: 3)
@@ -455,7 +444,7 @@ def answer_question(
             "web_search_used": bool,
         }
 
-    플로우 (기존 rag_chain.py와 동일):
+    플로우:
         1. Initialize → Validate → Retrieve → Grade
         2. Grade 성공 → Generate Docs → (정보 있으면) Finalize
         3. Grade 실패 또는 Generate Docs 실패 → Rewrite → Web Search → Generate Web → Finalize
@@ -493,7 +482,7 @@ def answer_question(
     graph = build_rag_graph()
     final_state = graph.invoke(initial_state)
 
-    # Validation 실패 시 특별 처리 (기존 rag_chain.py와 동일)
+    # Validation 실패 시 특별 처리
     if not final_state.get("is_valid", True):
         reason = final_state.get("validation_reason", "")
         if reason == "domain":
@@ -518,5 +507,6 @@ def answer_question(
 __all__ = [
     "build_rag_graph",
     "answer_question",
+    "build_llm",
     "load_unified_vector_db",
 ]

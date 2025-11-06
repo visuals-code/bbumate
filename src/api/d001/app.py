@@ -696,7 +696,7 @@ async def query_rag(query_request: QueryRequest, request: Request) -> QueryRespo
             record_query_success()
             record_llm_call(success=True)
 
-            logger.info("✅ Query completed successfully (legacy/basic)")
+            logger.info("Query completed successfully (legacy/basic)")
             logger.info("=" * 80)
 
             return QueryResponse(

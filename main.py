@@ -37,6 +37,9 @@ def root():
 
 # LangGraph 통합 버전 사용 (langgraph/chain.py)
 from src.langgraph.chain import answer_question
+
+# LangChain 통합 버전 사용 (chains/chain.py)
+# from src.chains.index import answer_question
 from src.ingestion.index import ingest
 from src.api.d002.api_d002 import (
     markdown_to_text,
@@ -44,6 +47,12 @@ from src.api.d002.api_d002 import (
     markdown_to_html,
     format_sources,
 )
+
+
+# 헬스체크 엔드포인트
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "service": "신혼부부 지원정책 RAG 서버", "version": "0.1.0"}
 
 
 class QueryRequest(BaseModel):
@@ -102,7 +111,7 @@ class IngestResponse(BaseModel):
 
 
 # API 엔드포인트
-@app.post("/query", response_model=QueryResponse)
+@app.post("/api/query", response_model=QueryResponse)
 def query(request: QueryRequest):
     """신혼부부 정책 관련 질문에 답변합니다.
 
@@ -117,6 +126,7 @@ def query(request: QueryRequest):
     start_time = time.perf_counter()
 
     # LangGraph 통합 기반 RAG 파이프라인 실행
+    # 통합 벡터 DB를 사용하는 RAG 파이프라인 실행 (d002 파이프라인 사용)
     res = answer_question(
         question=request.question,
         k=3,
@@ -124,7 +134,7 @@ def query(request: QueryRequest):
         use_validation=True,  # validation 활성화
         region=request.region,
         housing_type=request.housing_type,
-        verbose=True,
+        verbose=True,  # 디버깅을 위해 verbose 활성화
     )
 
     answer = res.get("answer", "답변 생성 실패")
@@ -163,7 +173,7 @@ def query(request: QueryRequest):
 
 
 # Ingestion 엔드포인트 (관리자용)
-@app.post("/ingest", response_model=IngestResponse)
+@app.post("/api/ingest", response_model=IngestResponse)
 def run_ingest(request: IngestRequest):
     """도메인별 문서 ingestion 실행 (관리자용).
 
