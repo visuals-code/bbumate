@@ -31,19 +31,72 @@ jobs:
           echo "2. Pulling latest code..."
           git pull origin main
 
-          echo "3. Activating virtual environment..."
+          echo "3. Ensuring Python via pyenv (using .python-version)..."
+          if [ -f .python-version ]; then
+            DESIRED=$(cat .python-version)
+          else
+            DESIRED=""
+          fi
+
+          export PYENV_ROOT="$HOME/.pyenv"
+          export PATH="$PYENV_ROOT/bin:$PATH"
+
+          if ! command -v pyenv >/dev/null 2>&1; then
+            echo "pyenv not found; installing..."
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update -y
+              sudo apt-get install -y build-essential curl git libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libffi-dev liblzma-dev
+            elif command -v yum >/dev/null 2>&1; then
+              sudo yum groupinstall -y "Development Tools" || true
+              sudo yum install -y curl git openssl-devel bzip2-devel readline-devel sqlite-devel libffi-devel zlib-devel xz-devel || true
+            elif command -v dnf >/dev/null 2>&1; then
+              sudo dnf groupinstall -y "Development Tools" || true
+              sudo dnf install -y curl git openssl-devel bzip2-devel readline-devel sqlite-devel libffi-devel zlib-devel xz-devel || true
+            fi
+            if [ ! -d "$PYENV_ROOT" ]; then
+              git clone https://github.com/pyenv/pyenv.git "$PYENV_ROOT"
+            fi
+          fi
+
+          if command -v pyenv >/dev/null 2>&1; then
+            eval "$(pyenv init -)"
+            if [ -n "$DESIRED" ]; then
+              pyenv install -s "$DESIRED"
+              pyenv local "$DESIRED"
+            fi
+            PYBIN="$(pyenv which python)"
+          else
+            echo "pyenv unavailable; falling back to system python"
+            PYBIN="$(command -v python3 || command -v python)"
+          fi
+
+          # Recreate venv if missing or Python version mismatched
+          if [ ! -x venv/bin/python ]; then
+            echo "Creating virtual environment..."
+            "$PYBIN" -m venv venv
+          else
+            CURRENT_VER="$(venv/bin/python -V 2>&1 | awk '{print $2}')"
+            if [ -n "$DESIRED" ] && [ "$CURRENT_VER" != "$DESIRED" ]; then
+              echo "Recreating venv to match Python $DESIRED (current: $CURRENT_VER)"
+              rm -rf venv
+              "$PYBIN" -m venv venv
+            fi
+          fi
+
+          echo "4. Activating virtual environment..."
           source venv/bin/activate
 
-          echo "4. Installing dependencies..."
+          echo "5. Installing dependencies..."
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-          echo "5. Writing .env file..."
+          echo "6. Writing .env file..."
           echo "${{ secrets.ENV_FILE }}" > .env
 
-          echo "6. Running ingestion script..."
+          echo "7. Running ingestion script..."
           python run_ingestion.py
 
-          echo "7. Restarting FastAPI service..."
+          echo "8. Restarting FastAPI service..."
           sudo systemctl restart fastapi
           echo "✅ Deployment complete!"
           EOF
