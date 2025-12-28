@@ -113,20 +113,29 @@ cat key.json
 
 ---
 
-## 🔐 GitHub Secrets 설정
+## 🔐 GitHub Secrets & Variables 설정
 
 ### 설정 경로
-Repository → Settings → Secrets and variables → Actions → New repository secret
+Repository → Settings → Secrets and variables → Actions
 
-### 필수 Secrets, Variables
+### 필수 Secrets (민감 정보)
 
-| Secret 이름 | 값 | 설명 |
-|-------------|-----|------|
+**New repository secret** 클릭하여 추가:
+
+| Secret 이름 | 값 예시 | 설명 |
+|-------------|---------|------|
 | `GCP_PROJECT_ID` | `bbumate-api-1` | Google Cloud 프로젝트 ID |
 | `GCP_SA_KEY` | `key.json` 전체 내용 | 서비스 계정 키 (JSON 형식) |
 | `UPSTAGE_API_KEY` | `up_xxxxxxxxxxxxx` | Upstage API 키 |
-| `UPSTAGE_EMBEDDING_MODEL` | `solar-embedding-1-large` | 임베딩 모델명 (선택, 기본값 있음) |
-| `UPSTAGE_CHAT_MODEL` | `solar-1-mini-chat` | 채팅 모델명 (선택, 기본값 있음) |
+
+### 필수 Variables (설정 값)
+
+**Variables** 탭 → **New repository variable** 클릭하여 추가:
+
+| Variable 이름 | 값 | 설명 |
+|---------------|-----|------|
+| `UPSTAGE_EMBEDDING_MODEL` | `solar-embedding-1-large` | 임베딩 모델명 |
+| `UPSTAGE_CHAT_MODEL` | `solar-1-mini-chat` | 채팅 모델명 |
 
 ### 선택 Secrets
 
