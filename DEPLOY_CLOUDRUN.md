@@ -75,7 +75,7 @@ gcloud services enable artifactregistry.googleapis.com
 # Artifact Registry 생성
 gcloud artifacts repositories create bbumate-api \
   --repository-format=docker \
-  --location=asia-northeast3 \
+  --location=asia-northeast1 \
   --description="Docker repository for Bbumate API"
 
 # 서비스 계정 생성
@@ -210,13 +210,13 @@ main 브랜치에 push하면 GitHub Actions가 자동으로 배포합니다.
 
 ### 서비스 상태 확인
 ```bash
-gcloud run services describe bbumate-api --region asia-northeast3
+gcloud run services describe bbumate-api --region asia-northeast1
 ```
 
 ### 배포된 서비스 URL 확인
 ```bash
 gcloud run services describe bbumate-api \
-  --region asia-northeast3 \
+  --region asia-northeast1 \
   --format 'value(status.url)'
 ```
 
@@ -246,7 +246,7 @@ Container failed to start. Failed to start and listen on the port
 ```bash
 gcloud run services update bbumate-api \
   --memory 1Gi \
-  --region asia-northeast3
+  --region asia-northeast1
 ```
 
 ### 3. Cold Start 느림
@@ -258,7 +258,7 @@ gcloud run services update bbumate-api \
 ```bash
 gcloud run services update bbumate-api \
   --min-instances 1 \
-  --region asia-northeast3
+  --region asia-northeast1
 ```
 
 **해결 방법 B (무료):**
@@ -299,7 +299,7 @@ TAVILY_API_KEY not found
 ```bash
 # URL 확인
 gcloud run services describe bbumate-api \
-  --region asia-northeast3 \
+  --region asia-northeast1 \
   --format 'value(status.url)'
 
 # 헬스체크
