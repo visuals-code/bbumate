@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+.key.json
 
 # Python bytecode / caches
 __pycache__/
@@ -26,7 +27,6 @@ data/*/vector_store/**
 
 # OS / Editor
 .DS_Store
-.vscode/
 .idea/
 
 # Logs

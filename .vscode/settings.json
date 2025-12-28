@@ -1,0 +1,29 @@
+{
+  // 저장 시 자동 포맷
+  "editor.formatOnSave": true,
+
+  // Python 설정
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+
+  // Black 포매터 옵션
+  "black-formatter.args": [
+    "--line-length=100"
+  ],
+
+  // Python 인터프리터 경로
+  "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python",
+
+  // 파일 제외
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/venv": true,
+    "**/.pytest_cache": true
+  }
+}
