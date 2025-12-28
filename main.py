@@ -52,9 +52,7 @@ def health_check():
 
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=500, description="사용자 질문")
-    region: Optional[str] = Field(
-        None, description="사전 선택 지역 (예: 인천, 서울, 경기)"
-    )
+    region: Optional[str] = Field(None, description="사전 선택 지역 (예: 인천, 서울, 경기)")
     housing_type: Optional[str] = Field(
         None, description="사전 선택 주거형태 (예: 전세, 월세, 자가, 매매)"
     )
@@ -80,7 +78,7 @@ class QueryRequest(BaseModel):
 
 class SourceItem(BaseModel):
     title: str
-    url: str | None = None
+    url: Optional[str] = None
     source: str
 
 
@@ -88,16 +86,18 @@ class QueryResponse(BaseModel):
     answer: str
     answer_md: str
     answer_html: str
-    sources: list[SourceItem]
+    sources: List[SourceItem]
 
 
 class IngestRequest(BaseModel):
     domain: str = "all"  # d001, d002, d003, d004, d005, or "all" for all domains
-    data_dir: str | None = None
+    data_dir: Optional[str] = None
     mode: str = "pdf"
     chunk_size: int = 1000
     chunk_overlap: int = 200
-    force_recreate: bool = False  # 기존 DB를 삭제하고 재생성할지 여부 (주의: True 시 모든 데이터 삭제)
+    force_recreate: bool = (
+        False  # 기존 DB를 삭제하고 재생성할지 여부 (주의: True 시 모든 데이터 삭제)
+    )
 
 
 class IngestResponse(BaseModel):
